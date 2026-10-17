@@ -16,6 +16,8 @@ enum FriendsPage: String, CaseIterable, Identifiable {
 }
 
 struct FriendsView: View {
+    var onStartBoard: () -> Void = {}
+
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Namespace private var glass
     @FocusState private var searchFocused: Bool
@@ -81,9 +83,16 @@ struct FriendsView: View {
         .sensoryFeedback(.success, trigger: accepted)
         .sensoryFeedback(.impact(weight: .light), trigger: sent)
         .sheet(item: $selected) { person in
-            FriendSheet(person: person)
-                .presentationDetents([.height(340)])
-                .presentationDragIndicator(.visible)
+            FriendSheet(
+                person: person,
+                onStartBoard: {
+                    selected = nil
+                    onStartBoard()
+                },
+                onRemove: { remove(person) }
+            )
+            .presentationDetents([.height(person.boards.isEmpty ? 270 : 320)])
+            .presentationDragIndicator(.visible)
         }
         .onAppear(perform: FriendLookupCheck.run)
     }
@@ -488,6 +497,11 @@ struct FriendsView: View {
         accepted += 1
     }
 
+    private func remove(_ person: StitchPerson) {
+        selected = nil
+        withAnimation(motion) { friends.removeAll { $0.id == person.id } }
+    }
+
     private func decline(_ person: StitchPerson) {
         withAnimation(motion) { requests.removeAll { $0.id == person.id } }
     }
@@ -635,31 +649,118 @@ struct MiniCover: View {
 
 private struct FriendSheet: View {
     var person: StitchPerson
+    var onStartBoard: () -> Void
+    var onRemove: () -> Void
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 14) {
+        VStack(alignment: .leading, spacing: 22) {
             HStack(spacing: 14) {
                 Avatar(person: person, size: 56)
-                VStack(alignment: .leading, spacing: 2) {
+                VStack(alignment: .leading, spacing: 0) {
                     Text(person.name)
-                        .font(StitchFont.display(28))
-                        .tracking(-0.6)
+                        .font(StitchFont.display(30))
+                        .tracking(-0.8)
                         .foregroundStyle(StitchColor.ink)
-                    Text(person.note)
+                    Text(person.handle)
                         .font(StitchFont.sans(14, weight: .medium))
                         .foregroundStyle(StitchColor.muted)
                 }
+                Spacer(minLength: 8)
+                Menu {
+                    Button("Remove friend", systemImage: "person.badge.minus", role: .destructive, action: onRemove)
+                } label: {
+                    Image(systemName: "ellipsis")
+                        .font(.system(size: 16, weight: .semibold))
+                        .foregroundStyle(StitchColor.ink)
+                        .frame(width: 40, height: 40)
+                        .contentShape(Circle())
+                }
+                .glassEffect(.regular.interactive(), in: .circle)
+                .accessibilityLabel("More")
             }
-            ForEach(person.boards) { board in
-                Text(board.title)
-                    .font(StitchFont.sans(16, weight: .medium))
-                    .foregroundStyle(StitchColor.ink)
+            .padding(.horizontal, 20)
+
+            if person.boards.isEmpty {
+                emptyShared
+                    .padding(.horizontal, 20)
+            } else {
+                VStack(alignment: .leading, spacing: 10) {
+                    Text(person.boards.count == 1 ? "1 board together" : "\(person.boards.count) boards together")
+                        .font(StitchFont.sans(14, weight: .semibold))
+                        .foregroundStyle(StitchColor.muted)
+                        .padding(.horizontal, 20)
+                    ScrollView(.horizontal) {
+                        HStack(spacing: 12) {
+                            ForEach(person.boards) { board in
+                                sharedCard(board)
+                            }
+                        }
+                        .padding(.horizontal, 20)
+                    }
+                    .scrollIndicators(.hidden)
+                }
             }
             Spacer(minLength: 0)
         }
-        .padding(.horizontal, 20)
-        .padding(.top, 24)
+        .padding(.top, 28)
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+    }
+
+    private func sharedCard(_ board: ProfileBoard) -> some View {
+        VStack(alignment: .leading, spacing: 8) {
+            MiniCover(sticker: board.sticker, width: 156, height: 118, radius: 22)
+            VStack(alignment: .leading, spacing: 1) {
+                Text(board.title)
+                    .font(StitchFont.display(18))
+                    .foregroundStyle(StitchColor.ink)
+                Text(board.owner.map { "\($0)’s board" } ?? "Your board")
+                    .font(StitchFont.sans(13, weight: .medium))
+                    .foregroundStyle(StitchColor.muted)
+            }
+            .padding(.horizontal, 2)
+        }
+        .frame(width: 156)
+        .accessibilityElement(children: .combine)
+    }
+
+    private var emptyShared: some View {
+        VStack(spacing: 18) {
+            HStack(spacing: 18) {
+                ZStack {
+                    RoundedRectangle(cornerRadius: 18, style: .continuous)
+                        .stroke(StitchColor.dash, style: StrokeStyle(lineWidth: 1.4, dash: [5, 5]))
+                        .frame(width: 92, height: 72)
+                    HStack(spacing: -12) {
+                        Avatar(person: FriendSample.me, size: 34)
+                            .overlay { Circle().stroke(StitchColor.cream, lineWidth: 2) }
+                        Avatar(person: person, size: 34)
+                            .overlay { Circle().stroke(StitchColor.cream, lineWidth: 2) }
+                    }
+                }
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("Nothing shared yet")
+                        .font(StitchFont.display(22))
+                        .tracking(-0.3)
+                        .foregroundStyle(StitchColor.ink)
+                    Text("Start a board and let \(person.name) add to it.")
+                        .font(StitchFont.sans(14, weight: .medium))
+                        .foregroundStyle(StitchColor.muted)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+            }
+            .accessibilityElement(children: .combine)
+
+            Button(action: onStartBoard) {
+                Label("Start a board together", systemImage: "plus")
+                    .font(StitchFont.sans(16, weight: .semibold))
+                    .frame(maxWidth: .infinity)
+                    .frame(height: 40)
+            }
+            .buttonStyle(.glassProminent)
+            .buttonBorderShape(.capsule)
+            .tint(StitchColor.accent)
+        }
     }
 }
 
@@ -736,6 +837,8 @@ private extension StitchColor {
 
 private enum FriendSample {
     static let inviteURL = URL(string: "https://stitch.app/invite/joni")!
+
+    static let me = StitchPerson(name: "Joni", tone: StitchColor.accent.opacity(0.75))
 
     static let alex = StitchPerson(
         name: "Alex",

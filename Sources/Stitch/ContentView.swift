@@ -9,7 +9,7 @@ struct ContentView: View {
                 StartBoardView()
             }
             Tab("Friends", systemImage: "person.2", value: .friends) {
-                FriendsView()
+                FriendsView(onStartBoard: { tab = .boards })
             }
             Tab("Profile", systemImage: "person.crop.circle", value: .profile) {
                 ProfileView()
