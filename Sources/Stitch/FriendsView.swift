@@ -1,106 +1,160 @@
 import SwiftUI
 import UIKit
 
+enum FriendsPage: String, CaseIterable, Identifiable {
+    case people
+    case activity
+
+    var id: String { rawValue }
+
+    var title: String {
+        switch self {
+        case .people: "People"
+        case .activity: "Activity"
+        }
+    }
+}
+
 struct FriendsView: View {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
-    @State private var requests = FriendSample.requests
+    @Namespace private var glass
+    @FocusState private var searchFocused: Bool
+    @State private var page: FriendsPage = .people
     @State private var friends = FriendSample.friends
-    @State private var accepted = 0
-    @State private var addOpen = false
-    @State private var dragX: CGFloat = 0
-    @State private var dragging = false
+    @State private var requests = FriendSample.requests
+    @State private var waiting: [StitchPerson] = []
+    @State private var searching = false
     @State private var query = ""
-    @State private var linkCopied = false
-    @State private var copied = 0
+    @State private var copied = false
     @State private var selected: StitchPerson?
+    @State private var accepted = 0
+    @State private var sent = 0
 
-    private var settle: Animation {
-        reduceMotion ? .easeOut(duration: 0.2) : .spring(response: 0.4, dampingFraction: 1)
+    private var motion: Animation {
+        reduceMotion ? .easeOut(duration: 0.18) : .spring(response: 0.36, dampingFraction: 1)
     }
 
-    private var coverAnimation: Animation? {
-        if dragging { return nil }
-        return reduceMotion ? .easeOut(duration: 0.2) : .spring(response: 0.4, dampingFraction: 1)
+    private var trimmedQuery: String {
+        query.trimmingCharacters(in: .whitespacesAndNewlines)
     }
 
-    private var searchResults: [StitchPerson] {
+    private var friendMatches: [StitchPerson] {
+        friends.filter { $0.matches(query) }
+    }
+
+    private var strangerMatches: [StitchPerson] {
         FriendSample.directory.filter { person in
-            FriendLookup.matches(person.name, query: query)
+            person.matches(query)
                 && !friends.contains { $0.id == person.id }
                 && !requests.contains { $0.id == person.id }
         }
     }
 
     var body: some View {
-        GeometryReader { geo in
-            ZStack(alignment: .top) {
-                listLayer
-                AddFriendScreen(
-                    query: $query,
-                    results: searchResults,
-                    linkCopied: linkCopied,
-                    reduceMotion: reduceMotion,
-                    onClose: { addOpen = false },
-                    onCopy: copyLink,
-                    onAdd: addFriend
-                )
-                .offset(x: coverX(geo.size.width))
-                .opacity(reduceMotion && !addOpen ? 0 : 1)
-                .allowsHitTesting(addOpen)
-                .simultaneousGesture(coverDrag(width: geo.size.width))
+        VStack(alignment: .leading, spacing: 16) {
+            header
+            if searching {
+                searchPanel
+                    .transition(.opacity)
+            } else {
+                PageSwitch(page: $page, badge: requests.count)
+                    .transition(.opacity)
+                ZStack {
+                    if page == .people {
+                        peoplePage
+                            .transition(pageTransition(fromTrailing: false))
+                    } else {
+                        activityPage
+                            .transition(pageTransition(fromTrailing: true))
+                    }
+                }
+                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+                .clipped()
             }
-            .animation(coverAnimation, value: addOpen)
-            .animation(coverAnimation, value: dragX)
         }
+        .padding(.horizontal, 16)
+        .padding(.top, 6)
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
         .background(StitchColor.cream)
-        .sheet(item: $selected) { person in
-            SharedBoardsSheet(person: person)
-                .presentationDetents([.height(person.boards.isEmpty ? 188 : 268)])
-                .presentationDragIndicator(.visible)
-                .presentationBackground(StitchColor.cream.opacity(0.94))
-        }
+        .animation(motion, value: page)
+        .sensoryFeedback(.selection, trigger: page)
         .sensoryFeedback(.success, trigger: accepted)
-        .sensoryFeedback(.success, trigger: copied)
+        .sensoryFeedback(.impact(weight: .light), trigger: sent)
+        .sheet(item: $selected) { person in
+            FriendSheet(person: person)
+                .presentationDetents([.height(340)])
+                .presentationDragIndicator(.visible)
+        }
         .onAppear(perform: FriendLookupCheck.run)
     }
 
-    private var listLayer: some View {
-        Group {
-            if requests.isEmpty && friends.isEmpty {
-                empty
-            } else {
-                populated
+    // MARK: Header
+
+    private var header: some View {
+        GlassEffectContainer(spacing: 10) {
+            HStack(spacing: 10) {
+                if searching {
+                    HStack(spacing: 8) {
+                        Image(systemName: "magnifyingglass")
+                            .font(.system(size: 15, weight: .semibold))
+                            .foregroundStyle(StitchColor.muted)
+                        TextField("Name or username", text: $query)
+                            .font(StitchFont.sans(16, weight: .medium))
+                            .foregroundStyle(StitchColor.ink)
+                            .focused($searchFocused)
+                            .textInputAutocapitalization(.never)
+                            .autocorrectionDisabled()
+                            .submitLabel(.search)
+                    }
+                    .padding(.horizontal, 16)
+                    .frame(maxWidth: .infinity)
+                    .frame(height: 48)
+                    .glassEffect(.regular.interactive(), in: .capsule)
+                    .glassEffectID("add", in: glass)
+
+                    Button(action: closeSearch) {
+                        Image(systemName: "xmark")
+                            .font(.system(size: 15, weight: .semibold))
+                            .foregroundStyle(StitchColor.ink)
+                            .frame(width: 48, height: 48)
+                            .contentShape(Circle())
+                    }
+                    .buttonStyle(.plain)
+                    .glassEffect(.regular.interactive(), in: .circle)
+                    .glassEffectID("close", in: glass)
+                    .accessibilityLabel("Close search")
+                } else {
+                    Text("Friends")
+                        .font(StitchFont.display(34))
+                        .tracking(-1)
+                        .foregroundStyle(StitchColor.ink)
+                        .transition(.opacity)
+
+                    Spacer(minLength: 12)
+
+                    Button(action: openSearch) {
+                        Label("Add", systemImage: "plus")
+                            .font(StitchFont.sans(16, weight: .semibold))
+                            .foregroundStyle(StitchColor.cream)
+                            .padding(.horizontal, 20)
+                            .frame(height: 44)
+                            .contentShape(Capsule())
+                    }
+                    .buttonStyle(.plain)
+                    .glassEffect(.regular.tint(StitchColor.accent).interactive(), in: .capsule)
+                    .glassEffectID("add", in: glass)
+                    .accessibilityHint("Find people or share an invite")
+                }
             }
+            .frame(height: 48)
         }
     }
 
-    private var populated: some View {
-        VStack(alignment: .leading, spacing: 16) {
-            header
-            if !requests.isEmpty {
-                VStack(spacing: 10) {
-                    ForEach(requests) { person in
-                        requestCard(person)
-                    }
-                }
-            }
-            ScrollView {
-                LazyVStack(spacing: 0) {
-                    ForEach(friends) { person in
-                        friendRow(person)
-                    }
-                }
-            }
-            .scrollIndicators(.hidden)
-        }
-        .padding(.horizontal, 20)
-        .padding(.top, 8)
-    }
+    // MARK: People
 
-    private var empty: some View {
-        VStack(alignment: .leading, spacing: 0) {
-            header
+    @ViewBuilder
+    private var peoplePage: some View {
+        if friends.isEmpty {
             VStack(spacing: 20) {
                 EmptyPeople()
                 VStack(spacing: 8) {
@@ -112,283 +166,499 @@ struct FriendsView: View {
                         .font(StitchFont.sans(15, weight: .medium))
                         .foregroundStyle(StitchColor.muted)
                 }
-            }
-            .frame(maxWidth: .infinity, maxHeight: .infinity)
-        }
-        .padding(.horizontal, 20)
-        .padding(.top, 8)
-    }
-
-    private var header: some View {
-        HStack(alignment: .center) {
-            Text("Friends")
-                .font(StitchFont.display(34))
-                .tracking(-1)
-                .foregroundStyle(StitchColor.ink)
-            Spacer(minLength: 12)
-            Button("Add") { addOpen = true }
-                .font(StitchFont.sans(14, weight: .semibold))
+                ShareLink(item: FriendSample.inviteURL) {
+                    Label("Share invite link", systemImage: "square.and.arrow.up")
+                        .font(StitchFont.sans(16, weight: .semibold))
+                        .padding(.horizontal, 6)
+                        .frame(height: 36)
+                }
                 .buttonStyle(.glassProminent)
                 .buttonBorderShape(.capsule)
-                .controlSize(.small)
                 .tint(StitchColor.accent)
-                .accessibilityHint("Invite someone")
-        }
-    }
-
-    private func requestCard(_ person: StitchPerson) -> some View {
-        HStack(spacing: 12) {
-            avatar(person, size: 40)
-            VStack(alignment: .leading, spacing: 2) {
-                Text("\(person.name) asked to join")
-                    .font(StitchFont.sans(15, weight: .medium))
-                    .foregroundStyle(StitchColor.ink)
-                Text("Request")
-                    .font(StitchFont.sans(13, weight: .medium))
-                    .foregroundStyle(StitchColor.muted)
             }
-            .frame(maxWidth: .infinity, alignment: .leading)
-            Button("Accept") { accept(person) }
-                .font(StitchFont.sans(14, weight: .semibold))
-                .buttonStyle(.glass)
-                .buttonBorderShape(.capsule)
-                .controlSize(.small)
-                .tint(StitchColor.accent)
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .offset(y: -28)
+        } else {
+            ScrollView {
+                LazyVStack(spacing: 0) {
+                    ForEach(friends) { person in
+                        friendRow(person)
+                    }
+                }
+                .padding(.bottom, 12)
+            }
+            .scrollIndicators(.hidden)
         }
-        .padding(14)
-        .background(StitchColor.slot, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
     }
 
     private func friendRow(_ person: StitchPerson) -> some View {
         Button {
             selected = person
         } label: {
-            HStack(spacing: 12) {
-                avatar(person, size: 44)
+            HStack(spacing: 14) {
+                Avatar(person: person, size: 48)
                 VStack(alignment: .leading, spacing: 2) {
                     Text(person.name)
-                        .font(StitchFont.sans(16, weight: .medium))
+                        .font(StitchFont.sans(17, weight: .medium))
                         .foregroundStyle(StitchColor.ink)
                     Text(person.note)
                         .font(StitchFont.sans(13, weight: .medium))
                         .foregroundStyle(StitchColor.muted)
                 }
-                Spacer(minLength: 0)
+                Spacer(minLength: 8)
+                BoardStack(boards: person.boards)
             }
-            .padding(.vertical, 12)
+            .padding(.vertical, 10)
             .frame(maxWidth: .infinity, alignment: .leading)
             .contentShape(Rectangle())
         }
         .buttonStyle(PressScale(reduceMotion: reduceMotion))
+        .accessibilityLabel("\(person.name), \(person.note)")
         .accessibilityHint("Shows boards you share")
     }
 
-    private func avatar(_ person: StitchPerson, size: CGFloat) -> some View {
-        Circle()
-            .fill(person.tone)
-            .frame(width: size, height: size)
-            .accessibilityHidden(true)
+    // MARK: Activity
+
+    private var activityPage: some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: 26) {
+                if !requests.isEmpty {
+                    section("Requests") {
+                        VStack(spacing: 0) {
+                            ForEach(requests) { person in
+                                requestRow(person)
+                                if person.id != requests.last?.id {
+                                    Divider().overlay(StitchColor.line).padding(.leading, 56)
+                                }
+                            }
+                        }
+                        .padding(.horizontal, 14)
+                        .padding(.vertical, 4)
+                        .background(StitchColor.slot, in: RoundedRectangle(cornerRadius: 22, style: .continuous))
+                    }
+                }
+
+                if !waiting.isEmpty {
+                    section("Waiting on") {
+                        ForEach(waiting) { person in
+                            waitingRow(person)
+                        }
+                    }
+                }
+
+                section("Recent") {
+                    ForEach(FriendSample.recent) { event in
+                        eventRow(event)
+                    }
+                }
+            }
+            .padding(.top, 4)
+            .padding(.bottom, 12)
+        }
+        .scrollIndicators(.hidden)
+    }
+
+    private func requestRow(_ person: StitchPerson) -> some View {
+        HStack(spacing: 12) {
+            Avatar(person: person, size: 44)
+            VStack(alignment: .leading, spacing: 2) {
+                Text(person.name)
+                    .font(StitchFont.sans(16, weight: .medium))
+                    .foregroundStyle(StitchColor.ink)
+                Text("Wants to be friends")
+                    .font(StitchFont.sans(13, weight: .medium))
+                    .foregroundStyle(StitchColor.muted)
+            }
+            Spacer(minLength: 8)
+            Button {
+                decline(person)
+            } label: {
+                Image(systemName: "xmark")
+                    .font(.system(size: 13, weight: .bold))
+                    .foregroundStyle(StitchColor.muted)
+                    .frame(width: 30, height: 30)
+            }
+            .buttonStyle(.glass)
+            .buttonBorderShape(.circle)
+            .accessibilityLabel("Decline \(person.name)")
+
+            Button("Accept") { accept(person) }
+                .font(StitchFont.sans(15, weight: .semibold))
+                .buttonStyle(.glassProminent)
+                .buttonBorderShape(.capsule)
+                .tint(StitchColor.accent)
+        }
+        .padding(.vertical, 12)
+    }
+
+    private func waitingRow(_ person: StitchPerson) -> some View {
+        HStack(spacing: 12) {
+            Avatar(person: person, size: 44)
+                .opacity(0.7)
+            VStack(alignment: .leading, spacing: 2) {
+                Text(person.name)
+                    .font(StitchFont.sans(16, weight: .medium))
+                    .foregroundStyle(StitchColor.ink)
+                Text("Request sent")
+                    .font(StitchFont.sans(13, weight: .medium))
+                    .foregroundStyle(StitchColor.muted)
+            }
+            Spacer(minLength: 8)
+            Button("Cancel") {
+                withAnimation(motion) { waiting.removeAll { $0.id == person.id } }
+            }
+            .font(StitchFont.sans(14, weight: .semibold))
+            .foregroundStyle(StitchColor.ink)
+            .buttonStyle(.glass)
+            .buttonBorderShape(.capsule)
+        }
+        .padding(.vertical, 10)
+    }
+
+    private func eventRow(_ event: FriendEvent) -> some View {
+        HStack(spacing: 12) {
+            Avatar(person: event.person, size: 40)
+            VStack(alignment: .leading, spacing: 2) {
+                Text("\(Text(event.person.name).foregroundStyle(StitchColor.ink)) \(event.action) \(Text(event.board.title).foregroundStyle(StitchColor.ink))")
+                    .font(StitchFont.sans(15, weight: .medium))
+                    .foregroundStyle(StitchColor.muted)
+                    .fixedSize(horizontal: false, vertical: true)
+                Text(event.time)
+                    .font(StitchFont.sans(13, weight: .medium))
+                    .foregroundStyle(StitchColor.muted.opacity(0.8))
+            }
+            Spacer(minLength: 8)
+            MiniCover(sticker: event.board.sticker, width: 44, height: 44, radius: 11)
+        }
+        .padding(.vertical, 10)
+        .accessibilityElement(children: .combine)
+    }
+
+    // MARK: Search
+
+    private var searchPanel: some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: 26) {
+                if trimmedQuery.isEmpty {
+                    inviteCard
+                } else {
+                    if !friendMatches.isEmpty {
+                        section("Your friends") {
+                            ForEach(friendMatches) { person in
+                                friendRow(person)
+                            }
+                        }
+                    }
+                    if !strangerMatches.isEmpty {
+                        section("On Stitch") {
+                            ForEach(strangerMatches) { person in
+                                strangerRow(person)
+                            }
+                        }
+                    }
+                    if friendMatches.isEmpty && strangerMatches.isEmpty {
+                        VStack(alignment: .leading, spacing: 4) {
+                            Text("No one called “\(trimmedQuery)”")
+                                .font(StitchFont.display(22))
+                                .foregroundStyle(StitchColor.ink)
+                            Text("Send them a link instead.")
+                                .font(StitchFont.sans(15, weight: .medium))
+                                .foregroundStyle(StitchColor.muted)
+                        }
+                        inviteCard
+                    }
+                }
+            }
+            .padding(.top, 6)
+            .padding(.bottom, 12)
+        }
+        .scrollIndicators(.hidden)
+        .scrollDismissesKeyboard(.interactively)
+    }
+
+    private var inviteCard: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            VStack(alignment: .leading, spacing: 4) {
+                Text("Invite with a link")
+                    .font(StitchFont.display(24))
+                    .tracking(-0.4)
+                    .foregroundStyle(StitchColor.ink)
+                Text("They join as your friend. Nothing is shared until you share it.")
+                    .font(StitchFont.sans(14, weight: .medium))
+                    .foregroundStyle(StitchColor.muted)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            HStack(spacing: 10) {
+                ShareLink(item: FriendSample.inviteURL) {
+                    Label("Share", systemImage: "square.and.arrow.up")
+                        .font(StitchFont.sans(15, weight: .semibold))
+                        .frame(maxWidth: .infinity)
+                        .frame(height: 36)
+                }
+                .buttonStyle(.glassProminent)
+                .buttonBorderShape(.capsule)
+                .tint(StitchColor.accent)
+
+                Button(action: copyLink) {
+                    Label(copied ? "Copied" : "Copy link", systemImage: copied ? "checkmark" : "link")
+                        .font(StitchFont.sans(15, weight: .semibold))
+                        .foregroundStyle(StitchColor.ink)
+                        .frame(maxWidth: .infinity)
+                        .frame(height: 36)
+                        .contentTransition(.symbolEffect(.replace))
+                }
+                .buttonStyle(.glass)
+                .buttonBorderShape(.capsule)
+            }
+        }
+        .padding(18)
+        .background(StitchColor.slot, in: RoundedRectangle(cornerRadius: 24, style: .continuous))
+    }
+
+    private func strangerRow(_ person: StitchPerson) -> some View {
+        let isWaiting = waiting.contains { $0.id == person.id }
+        return HStack(spacing: 14) {
+            Avatar(person: person, size: 48)
+            VStack(alignment: .leading, spacing: 2) {
+                Text(person.name)
+                    .font(StitchFont.sans(17, weight: .medium))
+                    .foregroundStyle(StitchColor.ink)
+                Text(person.handle)
+                    .font(StitchFont.sans(13, weight: .medium))
+                    .foregroundStyle(StitchColor.muted)
+            }
+            Spacer(minLength: 8)
+            if isWaiting {
+                Label("Sent", systemImage: "checkmark")
+                    .font(StitchFont.sans(15, weight: .semibold))
+                    .foregroundStyle(StitchColor.muted)
+                    .padding(.horizontal, 14)
+                    .frame(height: 36)
+                    .glassEffect(.regular, in: .capsule)
+            } else {
+                Button("Add") { request(person) }
+                    .font(StitchFont.sans(15, weight: .semibold))
+                    .buttonStyle(.glassProminent)
+                    .buttonBorderShape(.capsule)
+                    .tint(StitchColor.accent)
+            }
+        }
+        .padding(.vertical, 10)
+        .animation(motion, value: isWaiting)
+    }
+
+    // MARK: Pieces
+
+    private func section<Content: View>(_ title: String, @ViewBuilder content: () -> Content) -> some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Text(title)
+                .font(StitchFont.sans(14, weight: .semibold))
+                .foregroundStyle(StitchColor.muted)
+                .accessibilityAddTraits(.isHeader)
+            content()
+        }
+    }
+
+    private func pageTransition(fromTrailing: Bool) -> AnyTransition {
+        if reduceMotion { return .opacity }
+        let x: CGFloat = fromTrailing ? 18 : -18
+        return .offset(x: x).combined(with: .opacity)
+    }
+
+    // MARK: Actions
+
+    private func openSearch() {
+        withAnimation(motion) { searching = true }
+        searchFocused = true
+    }
+
+    private func closeSearch() {
+        searchFocused = false
+        withAnimation(motion) {
+            searching = false
+            query = ""
+        }
     }
 
     private func accept(_ person: StitchPerson) {
-        withAnimation(settle) {
+        withAnimation(motion) {
             requests.removeAll { $0.id == person.id }
-            var joined = person
-            joined.boards = []
-            friends.insert(joined, at: 0)
-            accepted += 1
+            friends.insert(person, at: 0)
         }
+        accepted += 1
     }
 
-    private func addFriend(_ person: StitchPerson) {
-        withAnimation(settle) {
-            friends.append(person)
-            query = ""
-            addOpen = false
-        }
+    private func decline(_ person: StitchPerson) {
+        withAnimation(motion) { requests.removeAll { $0.id == person.id } }
+    }
+
+    private func request(_ person: StitchPerson) {
+        withAnimation(motion) { waiting.append(person) }
+        sent += 1
     }
 
     private func copyLink() {
-        UIPasteboard.general.string = "https://stitch.app/invite/joni"
-        linkCopied = true
-        copied += 1
+        UIPasteboard.general.url = FriendSample.inviteURL
+        withAnimation(motion) { copied = true }
+        sent += 1
         Task {
-            try? await Task.sleep(for: .milliseconds(1400))
-            linkCopied = false
+            try? await Task.sleep(for: .seconds(1.6))
+            withAnimation(motion) { copied = false }
         }
-    }
-
-    private func coverX(_ width: CGFloat) -> CGFloat {
-        if reduceMotion { return 0 }
-        return (addOpen ? 0 : width) + dragX
-    }
-
-    private func coverDrag(width: CGFloat) -> some Gesture {
-        DragGesture(minimumDistance: 12, coordinateSpace: .local)
-            .onChanged { value in
-                guard !reduceMotion else { return }
-                let travel = value.translation
-                guard abs(travel.width) > abs(travel.height) else { return }
-                dragging = true
-                if travel.width < 0 {
-                    dragX = -rubberband(overshoot: -travel.width, dimension: width)
-                } else {
-                    dragX = travel.width
-                }
-            }
-            .onEnded { value in
-                guard dragging else { return }
-                let projected = dragX + project(value.velocity.width)
-                if projected > width * 0.33 {
-                    addOpen = false
-                }
-                dragX = 0
-                dragging = false
-            }
     }
 }
 
-private struct AddFriendScreen: View {
-    @Binding var query: String
-    var results: [StitchPerson]
-    var linkCopied: Bool
-    var reduceMotion: Bool
-    var onClose: () -> Void
-    var onCopy: () -> Void
-    var onAdd: (StitchPerson) -> Void
+// MARK: - Components
+
+private struct PageSwitch: View {
+    @Binding var page: FriendsPage
+    var badge: Int
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 0) {
-            HStack {
-                Button(action: onClose) {
-                    Image(systemName: "xmark")
-                        .font(.system(size: 15, weight: .semibold))
-                        .foregroundStyle(StitchColor.ink)
-                        .frame(width: 36, height: 36)
-                }
-                .buttonStyle(.glass)
-                .buttonBorderShape(.circle)
-                .controlSize(.small)
-                .accessibilityLabel("Close")
-
-                Spacer(minLength: 0)
-
-                Text("Add")
-                    .font(StitchFont.sans(17, weight: .semibold))
-                    .foregroundStyle(StitchColor.ink)
-
-                Spacer(minLength: 0)
-
-                Color.clear.frame(width: 36, height: 36)
-            }
-
-            Text("Send a link. They join as a friend.")
-                .font(StitchFont.sans(15, weight: .medium))
-                .foregroundStyle(StitchColor.muted)
-                .padding(.top, 32)
-
-            Button(action: onCopy) {
-                Label(linkCopied ? "Copied" : "Copy invite link", systemImage: linkCopied ? "checkmark" : "link")
-                    .font(StitchFont.sans(16, weight: .semibold))
-                    .frame(maxWidth: .infinity)
-                    .frame(height: 52)
-            }
-            .buttonStyle(.glassProminent)
-            .buttonBorderShape(.roundedRectangle(radius: 16))
-            .tint(StitchColor.accent)
-            .padding(.top, 20)
-            .animation(reduceMotion ? .easeOut(duration: 0.16) : .spring(response: 0.3, dampingFraction: 1), value: linkCopied)
-
-            Text("or find them")
-                .font(StitchFont.sans(13, weight: .medium))
-                .foregroundStyle(StitchColor.muted)
-                .frame(maxWidth: .infinity)
-                .padding(.top, 20)
-
-            TextField("Name or username", text: $query)
-                .font(StitchFont.sans(15, weight: .medium))
-                .foregroundStyle(StitchColor.ink)
-                .padding(.horizontal, 16)
-                .frame(height: 48)
-                .background(StitchColor.slot, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
-                .padding(.top, 20)
-                .textInputAutocapitalization(.never)
-                .autocorrectionDisabled()
-
-            if !query.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                if results.isEmpty {
-                    Text("No one with that name.")
-                        .font(StitchFont.sans(15, weight: .medium))
-                        .foregroundStyle(StitchColor.muted)
-                        .padding(.top, 18)
-                } else {
-                    VStack(spacing: 0) {
-                        ForEach(results) { person in
-                            HStack(spacing: 12) {
-                                Circle()
-                                    .fill(person.tone)
-                                    .frame(width: 44, height: 44)
-                                Text(person.name)
-                                    .font(StitchFont.sans(16, weight: .medium))
-                                    .foregroundStyle(StitchColor.ink)
-                                Spacer(minLength: 8)
-                                Button("Add") { onAdd(person) }
-                                    .font(StitchFont.sans(14, weight: .semibold))
-                                    .buttonStyle(.glassProminent)
-                                    .buttonBorderShape(.capsule)
-                                    .controlSize(.small)
-                                    .tint(StitchColor.accent)
-                            }
-                            .padding(.vertical, 12)
+        HStack(spacing: 0) {
+            ForEach(FriendsPage.allCases) { item in
+                Button {
+                    page = item
+                } label: {
+                    HStack(spacing: 6) {
+                        Text(item.title)
+                        if item == .activity && badge > 0 {
+                            Text("\(badge)")
+                                .font(StitchFont.sans(12, weight: .bold))
+                                .foregroundStyle(StitchColor.cream)
+                                .frame(minWidth: 18, minHeight: 18)
+                                .background(StitchColor.accent, in: Capsule())
+                                .accessibilityLabel("\(badge) new")
                         }
                     }
-                    .padding(.top, 8)
+                    .font(StitchFont.sans(15, weight: .semibold))
+                    .foregroundStyle(page == item ? StitchColor.ink : StitchColor.muted)
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 10)
+                    .contentShape(Capsule())
                 }
+                .buttonStyle(PressScale(reduceMotion: reduceMotion))
+                .accessibilityAddTraits(page == item ? [.isSelected] : [])
             }
-
-            Spacer(minLength: 0)
         }
-        .padding(.horizontal, 20)
-        .padding(.top, 8)
-        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
-        .background(StitchColor.cream)
+        .background {
+            GeometryReader { geo in
+                let tab = geo.size.width / CGFloat(FriendsPage.allCases.count)
+                Capsule()
+                    .fill(Color.white.opacity(0.42))
+                    .glassEffect(.regular.interactive(), in: .capsule)
+                    .frame(width: tab, height: geo.size.height)
+                    .offset(x: tab * CGFloat(FriendsPage.allCases.firstIndex(of: page) ?? 0))
+            }
+        }
+        .padding(4)
+        .glassEffect(.regular, in: .capsule)
+        .accessibilityElement(children: .contain)
     }
 }
 
-private struct SharedBoardsSheet: View {
+private struct Avatar: View {
+    var person: StitchPerson
+    var size: CGFloat
+
+    var body: some View {
+        Circle()
+            .fill(person.tone)
+            .frame(width: size, height: size)
+            .overlay {
+                Text(person.name.prefix(1))
+                    .font(StitchFont.display(size * 0.46))
+                    .foregroundStyle(StitchColor.paper)
+            }
+            .accessibilityHidden(true)
+    }
+}
+
+private struct BoardStack: View {
+    var boards: [ProfileBoard]
+
+    var body: some View {
+        ZStack {
+            ForEach(Array(boards.prefix(2).enumerated()), id: \.element.id) { index, board in
+                MiniCover(sticker: board.sticker, width: 34, height: 34, radius: 9)
+                    .overlay {
+                        RoundedRectangle(cornerRadius: 9, style: .continuous)
+                            .stroke(StitchColor.cream, lineWidth: 2)
+                    }
+                    .rotationEffect(.degrees(index == 0 ? 6 : -6))
+                    .offset(x: index == 0 ? 0 : -16)
+                    .zIndex(Double(-index))
+            }
+        }
+        .frame(width: 52, alignment: .trailing)
+        .accessibilityHidden(true)
+    }
+}
+
+/// Board cover laid out in a 176pt-tall design box, then scaled to fit.
+struct MiniCover: View {
+    var sticker: String
+    var width: CGFloat
+    var height: CGFloat
+    var radius: CGFloat
+
+    var body: some View {
+        let s = height / 176
+        ZStack {
+            StitchColor.slot
+            ZStack {
+                RoundedRectangle(cornerRadius: 5, style: .continuous)
+                    .fill(StitchColor.coverPhoto)
+                    .frame(width: 104, height: 128)
+                    .rotationEffect(.degrees(-8))
+                    .offset(x: -30, y: 12)
+                RoundedRectangle(cornerRadius: 16, style: .continuous)
+                    .fill(StitchColor.silk)
+                    .frame(width: 80, height: 82)
+                    .overlay {
+                        Text(sticker)
+                            .font(StitchFont.display(22))
+                            .foregroundStyle(StitchColor.accent)
+                    }
+                    .rotationEffect(.degrees(11))
+                    .offset(x: 34, y: 2)
+            }
+            .frame(width: width / s, height: 176)
+            .scaleEffect(s)
+        }
+        .frame(width: width, height: height)
+        .clipShape(RoundedRectangle(cornerRadius: radius, style: .continuous))
+        .accessibilityHidden(true)
+    }
+}
+
+private struct FriendSheet: View {
     var person: StitchPerson
 
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
-            VStack(alignment: .leading, spacing: 2) {
-                Text(person.name)
-                    .font(StitchFont.display(28))
-                    .tracking(-0.6)
-                    .foregroundStyle(StitchColor.ink)
-                Text(person.note)
-                    .font(StitchFont.sans(15, weight: .medium))
-                    .foregroundStyle(StitchColor.muted)
-            }
-            if person.boards.isEmpty {
-                Text("Boards you share will land here.")
-                    .font(StitchFont.sans(15, weight: .medium))
-                    .foregroundStyle(StitchColor.muted)
-                    .padding(.top, 6)
-            } else {
-                VStack(spacing: 0) {
-                    ForEach(person.boards, id: \.self) { board in
-                        Text(board)
-                            .font(StitchFont.sans(16, weight: .medium))
-                            .foregroundStyle(StitchColor.ink)
-                            .frame(maxWidth: .infinity, alignment: .leading)
-                            .padding(.vertical, 10)
-                    }
+            HStack(spacing: 14) {
+                Avatar(person: person, size: 56)
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(person.name)
+                        .font(StitchFont.display(28))
+                        .tracking(-0.6)
+                        .foregroundStyle(StitchColor.ink)
+                    Text(person.note)
+                        .font(StitchFont.sans(14, weight: .medium))
+                        .foregroundStyle(StitchColor.muted)
                 }
+            }
+            ForEach(person.boards) { board in
+                Text(board.title)
+                    .font(StitchFont.sans(16, weight: .medium))
+                    .foregroundStyle(StitchColor.ink)
             }
             Spacer(minLength: 0)
         }
         .padding(.horizontal, 20)
-        .padding(.top, 18)
+        .padding(.top, 24)
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
     }
 }
@@ -430,34 +700,70 @@ private struct PressScale: ButtonStyle {
     }
 }
 
+// MARK: - Model
+
 struct StitchPerson: Identifiable {
     var name: String
-    var boards: [String]
+    var boards: [ProfileBoard] = []
     var tone: Color
     var id: String { name }
+    var handle: String { "@\(name.lowercased())" }
 
     var note: String {
         switch boards.count {
         case 0: "Nothing shared yet"
-        case 1: boards[0]
+        case 1: boards[0].title
         default: "\(boards.count) boards together"
         }
     }
+
+    func matches(_ query: String) -> Bool {
+        FriendLookup.matches(name, query: query) || FriendLookup.matches(handle, query: query)
+    }
+}
+
+struct FriendEvent: Identifiable {
+    var person: StitchPerson
+    var action: String
+    var board: ProfileBoard
+    var time: String
+    var id: String { person.id + board.id }
+}
+
+private extension StitchColor {
+    static let coverPhoto = Color(red: 148 / 255, green: 127 / 255, blue: 106 / 255)
 }
 
 private enum FriendSample {
+    static let inviteURL = URL(string: "https://stitch.app/invite/joni")!
+
+    static let alex = StitchPerson(
+        name: "Alex",
+        boards: [ProfileBoard.sampleCollabs[0]],
+        tone: Color(red: 196 / 255, green: 181 / 255, blue: 164 / 255)
+    )
+    static let noor = StitchPerson(
+        name: "Noor",
+        boards: [ProfileBoard.sampleCollabs[1], ProfileBoard.sampleYours[0]],
+        tone: Color(red: 168 / 255, green: 146 / 255, blue: 128 / 255)
+    )
+    static let theo = StitchPerson(
+        name: "Theo",
+        tone: Color(red: 214 / 255, green: 201 / 255, blue: 187 / 255)
+    )
+
+    static let friends = [alex, noor, theo]
     static let requests = [
-        StitchPerson(name: "Mira", boards: [], tone: Color(red: 184 / 255, green: 163 / 255, blue: 143 / 255)),
-    ]
-    static let friends = [
-        StitchPerson(name: "Alex", boards: ["Night set", "Linen study"], tone: Color(red: 196 / 255, green: 181 / 255, blue: 164 / 255)),
-        StitchPerson(name: "Noor", boards: ["Silk season"], tone: Color(red: 168 / 255, green: 146 / 255, blue: 128 / 255)),
-        StitchPerson(name: "Theo", boards: [], tone: Color(red: 221 / 255, green: 210 / 255, blue: 198 / 255)),
+        StitchPerson(name: "Mira", tone: Color(red: 184 / 255, green: 163 / 255, blue: 143 / 255)),
     ]
     static let directory = [
-        StitchPerson(name: "Lena", boards: [], tone: Color(red: 176 / 255, green: 154 / 255, blue: 138 / 255)),
-        StitchPerson(name: "Sam", boards: [], tone: Color(red: 154 / 255, green: 140 / 255, blue: 124 / 255)),
-        StitchPerson(name: "Idris", boards: [], tone: Color(red: 206 / 255, green: 190 / 255, blue: 174 / 255)),
+        StitchPerson(name: "Lena", tone: Color(red: 176 / 255, green: 154 / 255, blue: 138 / 255)),
+        StitchPerson(name: "Sam", tone: Color(red: 154 / 255, green: 140 / 255, blue: 124 / 255)),
+        StitchPerson(name: "Idris", tone: Color(red: 196 / 255, green: 176 / 255, blue: 160 / 255)),
+    ]
+    static let recent = [
+        FriendEvent(person: alex, action: "added you to", board: ProfileBoard.sampleCollabs[0], time: "2h ago"),
+        FriendEvent(person: noor, action: "edited", board: ProfileBoard.sampleCollabs[1], time: "Yesterday"),
     ]
 }
 
@@ -474,14 +780,6 @@ enum FriendLookupCheck {
         assert(FriendLookup.matches("Lena", query: "le"))
         assert(!FriendLookup.matches("Lena", query: "  "))
         assert(!FriendLookup.matches("Lena", query: "sam"))
+        assert(StitchPerson(name: "Lena", tone: .clear).matches("@len"))
     }
-}
-
-private func rubberband(overshoot: CGFloat, dimension: CGFloat, constant: CGFloat = 0.55) -> CGFloat {
-    (overshoot * dimension * constant) / (dimension + constant * abs(overshoot))
-}
-
-private func project(_ velocity: CGFloat) -> CGFloat {
-    let deceleration = 0.998
-    return (velocity / 1000) * deceleration / (1 - deceleration)
 }
