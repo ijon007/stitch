@@ -9,7 +9,7 @@ struct ContentView: View {
                 StartBoardView()
             }
             Tab("Friends", systemImage: "person.2", value: .friends) {
-                QuietPage(title: "Friends")
+                FriendsView()
             }
             Tab("Profile", systemImage: "person.crop.circle", value: .profile) {
                 ProfileView()
