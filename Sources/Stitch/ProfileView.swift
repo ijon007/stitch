@@ -55,26 +55,30 @@ struct ProfileView: View {
 
     private var header: some View {
         HStack(spacing: 10) {
-            Circle()
-                .fill(StitchColor.swatchStone.opacity(0.72))
-                .frame(width: 34, height: 34)
-                .overlay {
-                    Circle().stroke(StitchColor.line, lineWidth: 0.5)
-                }
-                .accessibilityHidden(true)
+            HStack(spacing: 10) {
+                Circle()
+                    .fill(StitchColor.swatchStone.opacity(0.72))
+                    .frame(width: 34, height: 34)
+                    .overlay {
+                        Circle().stroke(StitchColor.line, lineWidth: 0.5)
+                    }
+                    .accessibilityHidden(true)
 
-            Text(name)
-                .font(StitchFont.display(34))
-                .tracking(-0.8)
-                .foregroundStyle(StitchColor.ink)
+                Text(name)
+                    .font(StitchFont.display(34))
+                    .tracking(-0.8)
+                    .foregroundStyle(StitchColor.ink)
+            }
+            .accessibilityElement(children: .combine)
+            .accessibilityAddTraits(.isHeader)
 
             Spacer(minLength: 8)
 
             Button {
             } label: {
-                Image(systemName: "sparkle")
-                    .font(.system(size: 15, weight: .semibold))
-                    .foregroundStyle(StitchColor.muted)
+                Image(systemName: "gearshape")
+                    .font(.system(size: 16, weight: .semibold))
+                    .foregroundStyle(StitchColor.ink)
                     .frame(width: 36, height: 36)
             }
             .buttonStyle(.glass)
@@ -82,8 +86,6 @@ struct ProfileView: View {
             .controlSize(.small)
             .accessibilityLabel("Settings")
         }
-        .accessibilityElement(children: .combine)
-        .accessibilityAddTraits(.isHeader)
     }
 
     @ViewBuilder
