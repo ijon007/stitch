@@ -27,9 +27,20 @@ struct ProfileView: View {
     var collabs: [ProfileBoard] = ProfileBoard.sampleCollabs
 
     @State private var shelf: ProfileShelf = .yours
+    @State private var showSettings = false
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
+        NavigationStack {
+            profile
+                .toolbar(.hidden, for: .navigationBar)
+                .navigationDestination(isPresented: $showSettings) {
+                    SettingsView(name: name)
+                }
+        }
+    }
+
+    private var profile: some View {
         VStack(alignment: .leading, spacing: 16) {
             header
             ShelfSwitch(shelf: $shelf)
@@ -75,6 +86,7 @@ struct ProfileView: View {
             Spacer(minLength: 8)
 
             Button {
+                showSettings = true
             } label: {
                 Image(systemName: "gearshape")
                     .font(.system(size: 16, weight: .semibold))
