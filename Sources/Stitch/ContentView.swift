@@ -12,7 +12,7 @@ struct ContentView: View {
                 QuietPage(title: "Friends")
             }
             Tab("Profile", systemImage: "person.crop.circle", value: .profile) {
-                QuietPage(title: "Profile")
+                ProfileView()
             }
         }
         .tint(StitchColor.accent)
