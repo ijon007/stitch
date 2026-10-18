@@ -33,7 +33,7 @@ struct BoardDrawer: View {
 
             Group {
                 if tab == .photos {
-                    PhotosPicker(selection: $picks, maxSelectionCount: 24, matching: .images)
+                    PhotosPicker("Photos", selection: $picks, maxSelectionCount: 24, matching: .images)
                         .photosPickerStyle(.inline)
                         .photosPickerDisabledCapabilities([.selectionActions, .stagingArea])
                         .photosPickerAccessoryVisibility(.hidden, edges: .all)
