@@ -279,6 +279,7 @@ struct BoardEditorView: View {
                 .presentationDetents([.medium, .large])
                 .presentationBackgroundInteraction(.enabled(upThrough: .medium))
                 .presentationDragIndicator(.visible)
+                .presentationBackground(StitchColor.background)
         }
         .confirmationDialog("Discard this board?", isPresented: $confirmDiscard, titleVisibility: .visible) {
             Button("Discard", role: .destructive) { dismiss() }

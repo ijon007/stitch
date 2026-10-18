@@ -33,7 +33,7 @@ struct BoardDrawer: View {
 
             Group {
                 if tab == .photos {
-                    PhotosPicker("Photos", selection: $picks, maxSelectionCount: 24, matching: .images)
+                    PhotosPicker("Photos", selection: $picks, maxSelectionCount: 24, selectionBehavior: .continuousAndOrdered, matching: .images)
                         .photosPickerStyle(.inline)
                         .photosPickerDisabledCapabilities([.selectionActions, .stagingArea])
                         .photosPickerAccessoryVisibility(.hidden, edges: .all)
@@ -44,7 +44,10 @@ struct BoardDrawer: View {
                 }
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
-
+        }
+        .padding(.top, 10)
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+        .safeAreaInset(edge: .bottom, spacing: 10) {
             Button(action: addSelected) {
                 Text("Add")
                     .font(StitchFont.sans(16, weight: .semibold))
@@ -59,8 +62,6 @@ struct BoardDrawer: View {
             .padding(.bottom, 10)
             .accessibilityHint(selectedCount == 0 ? "Select photos or stickers first" : "Adds \(selectedCount) to the board")
         }
-        .padding(.top, 10)
-        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
         .sensoryFeedback(.selection, trigger: tab)
         .sensoryFeedback(.selection, trigger: selectedCount)
     }
