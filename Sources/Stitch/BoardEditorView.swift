@@ -275,7 +275,7 @@ struct BoardEditorView: View {
         }
         .ignoresSafeArea(.keyboard)
         .sheet(isPresented: $drawerOpen) {
-            BoardDrawer(onPhoto: addPhoto, onSticker: addSticker)
+            BoardDrawer(onAdd: add)
                 .presentationDetents([.medium, .large])
                 .presentationBackgroundInteraction(.enabled(upThrough: .medium))
                 .presentationDragIndicator(.visible)
@@ -519,19 +519,23 @@ struct BoardEditorView: View {
         undone += 1
     }
 
-    private func add(_ content: BoardItem.Content) {
+    private func add(_ contents: [BoardItem.Content]) {
+        guard !contents.isEmpty else { return }
         // Fan new pieces out a little so a stack stays readable.
-        let fan = CGFloat(draft.items.count % 5) - 2
-        let item = BoardItem(
-            content: content,
-            center: CGPoint(x: 0.5 + fan * 0.04, y: 0.36 + fan * 0.03),
-            rotation: .degrees(Double.random(in: -7...7))
-        )
         withAnimation(motion) {
-            draft.change { $0.append(item) }
+            draft.change { items in
+                for content in contents {
+                    let fan = CGFloat(items.count % 5) - 2
+                    items.append(BoardItem(
+                        content: content,
+                        center: CGPoint(x: 0.5 + fan * 0.04, y: 0.36 + fan * 0.03),
+                        rotation: .degrees(Double.random(in: -7...7))
+                    ))
+                }
+            }
             drawerOpen = false
         }
-        added += 1
+        added += contents.count
     }
 
     private func photoFrameBinding(_ id: UUID) -> Binding<PhotoFrame>? {
@@ -549,14 +553,6 @@ struct BoardEditorView: View {
                 }
             }
         )
-    }
-
-    private func addPhoto(_ image: UIImage) {
-        add(.photo(image, .plain))
-    }
-
-    private func addSticker(_ kind: StickerKind) {
-        add(.sticker(kind))
     }
 
     private func delete(_ id: UUID) {

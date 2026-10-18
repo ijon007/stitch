@@ -16,12 +16,15 @@ enum DrawerTab: String, CaseIterable, Identifiable {
 }
 
 struct BoardDrawer: View {
-    var onPhoto: (UIImage) -> Void
-    var onSticker: (StickerKind) -> Void
+    var onAdd: ([BoardItem.Content]) -> Void
 
     @State private var tab: DrawerTab = .photos
-    @State private var pick: PhotosPickerItem?
+    @State private var picks: [PhotosPickerItem] = []
+    @State private var stickers: Set<StickerKind> = []
+    @State private var adding = false
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
+    private var selectedCount: Int { picks.count + stickers.count }
 
     var body: some View {
         VStack(spacing: 14) {
@@ -30,54 +33,93 @@ struct BoardDrawer: View {
 
             Group {
                 if tab == .photos {
-                    PhotosPicker(selection: $pick, matching: .images)
+                    PhotosPicker(selection: $picks, maxSelectionCount: 24, matching: .images)
                         .photosPickerStyle(.inline)
                         .photosPickerDisabledCapabilities([.selectionActions, .stagingArea])
                         .photosPickerAccessoryVisibility(.hidden, edges: .all)
                         .frame(maxWidth: .infinity, maxHeight: .infinity)
                         .clipped()
                 } else {
-                    stickers
+                    stickerGrid
                 }
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
+
+            Button(action: addSelected) {
+                Text("Add")
+                    .font(StitchFont.sans(16, weight: .semibold))
+                    .frame(maxWidth: .infinity)
+                    .frame(height: 44)
+            }
+            .buttonStyle(.glassProminent)
+            .buttonBorderShape(.capsule)
+            .tint(StitchColor.accent)
+            .disabled(selectedCount == 0 || adding)
+            .padding(.horizontal, 16)
+            .padding(.bottom, 10)
+            .accessibilityHint(selectedCount == 0 ? "Select photos or stickers first" : "Adds \(selectedCount) to the board")
         }
         .padding(.top, 10)
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
         .sensoryFeedback(.selection, trigger: tab)
-        .onChange(of: pick) { _, item in
-            guard let item else { return }
-            Task {
-                defer { pick = nil }
-                guard let data = try? await item.loadTransferable(type: Data.self),
-                      let image = BoardPhotoLoader.image(from: data) else { return }
-                onPhoto(image)
-            }
-        }
+        .sensoryFeedback(.selection, trigger: selectedCount)
     }
 
-    private var stickers: some View {
+    private var stickerGrid: some View {
         ScrollView {
             LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 10), count: 3), spacing: 10) {
                 ForEach(StickerKind.allCases) { kind in
+                    let isOn = stickers.contains(kind)
                     Button {
-                        onSticker(kind)
+                        if isOn { stickers.remove(kind) } else { stickers.insert(kind) }
                     } label: {
                         StickerView(kind: kind)
                             .scaleEffect(0.78)
                             .frame(maxWidth: .infinity)
                             .frame(height: 108)
                             .background(StitchColor.slot, in: RoundedRectangle(cornerRadius: 20, style: .continuous))
+                            .overlay {
+                                RoundedRectangle(cornerRadius: 20, style: .continuous)
+                                    .stroke(isOn ? StitchColor.accent : .clear, lineWidth: 2)
+                            }
+                            .overlay(alignment: .topTrailing) {
+                                if isOn {
+                                    Image(systemName: "checkmark.circle.fill")
+                                        .font(.system(size: 18, weight: .semibold))
+                                        .foregroundStyle(StitchColor.accent)
+                                        .padding(8)
+                                }
+                            }
                             .contentShape(RoundedRectangle(cornerRadius: 20, style: .continuous))
                     }
                     .buttonStyle(DrawerPress(reduceMotion: reduceMotion))
                     .accessibilityLabel(kind.label)
+                    .accessibilityAddTraits(isOn ? [.isSelected] : [])
                 }
             }
             .padding(.horizontal, 16)
             .padding(.bottom, 16)
         }
         .scrollIndicators(.hidden)
+    }
+
+    private func addSelected() {
+        guard !adding else { return }
+        adding = true
+        let chosen = stickers
+        let items = picks
+        Task {
+            var contents: [BoardItem.Content] = []
+            for item in items {
+                guard let data = try? await item.loadTransferable(type: Data.self),
+                      let image = BoardPhotoLoader.image(from: data) else { continue }
+                contents.append(.photo(image, .plain))
+            }
+            for kind in StickerKind.allCases where chosen.contains(kind) {
+                contents.append(.sticker(kind))
+            }
+            await MainActor.run { onAdd(contents) }
+        }
     }
 }
 
