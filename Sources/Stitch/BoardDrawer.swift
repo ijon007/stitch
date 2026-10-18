@@ -1,4 +1,108 @@
+import PhotosUI
 import SwiftUI
+
+enum DrawerTab: String, CaseIterable, Identifiable {
+    case photos, stickers
+
+    var id: String { rawValue }
+
+    var title: String {
+        switch self {
+        case .photos: "Photos"
+        case .stickers: "Stickers"
+        }
+    }
+}
+
+struct BoardDrawer: View {
+    var onPhoto: (UIImage) -> Void
+    var onSticker: (StickerKind) -> Void
+
+    @State private var tab: DrawerTab = .photos
+    @State private var pick: PhotosPickerItem?
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
+    var body: some View {
+        VStack(spacing: 14) {
+            Picker("Add", selection: $tab) {
+                ForEach(DrawerTab.allCases) { item in
+                    Text(item.title).tag(item)
+                }
+            }
+            .pickerStyle(.segmented)
+            .padding(.horizontal, 16)
+
+            switch tab {
+            case .photos:
+                PhotosPicker("Photos", selection: $pick, matching: .images, photoLibrary: .shared())
+                    .photosPickerStyle(.inline)
+                    .photosPickerDisabledCapabilities([.selectionActions, .stagingArea])
+                    .photosPickerAccessoryVisibility(.hidden, edges: .all)
+            case .stickers:
+                stickers
+            }
+        }
+        .padding(.top, 22)
+        .frame(maxHeight: .infinity, alignment: .top)
+        .sensoryFeedback(.selection, trigger: tab)
+        .onChange(of: pick) { _, item in
+            guard let item else { return }
+            Task {
+                defer { pick = nil }
+                guard let data = try? await item.loadTransferable(type: Data.self),
+                      let image = BoardPhotoLoader.image(from: data) else { return }
+                onPhoto(image)
+            }
+        }
+    }
+
+    private var stickers: some View {
+        ScrollView {
+            LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 10), count: 3), spacing: 10) {
+                ForEach(StickerKind.allCases) { kind in
+                    Button {
+                        onSticker(kind)
+                    } label: {
+                        StickerView(kind: kind)
+                            .scaleEffect(0.78)
+                            .frame(maxWidth: .infinity)
+                            .frame(height: 108)
+                            .background(StitchColor.slot, in: RoundedRectangle(cornerRadius: 20, style: .continuous))
+                            .contentShape(RoundedRectangle(cornerRadius: 20, style: .continuous))
+                    }
+                    .buttonStyle(DrawerPress(reduceMotion: reduceMotion))
+                    .accessibilityLabel(kind.label)
+                }
+            }
+            .padding(.horizontal, 16)
+            .padding(.bottom, 16)
+        }
+        .scrollIndicators(.hidden)
+    }
+}
+
+enum BoardPhotoLoader {
+    static let maxSide: CGFloat = 1600
+
+    /// Downscales library photos so a board of them stays light in memory.
+    static func image(from data: Data) -> UIImage? {
+        guard let image = UIImage(data: data) else { return nil }
+        let longest = max(image.size.width, image.size.height)
+        guard longest > maxSide else { return image }
+        let k = maxSide / longest
+        return image.preparingThumbnail(of: CGSize(width: image.size.width * k, height: image.size.height * k)) ?? image
+    }
+}
+
+private struct DrawerPress: ButtonStyle {
+    var reduceMotion: Bool
+
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .scaleEffect(configuration.isPressed && !reduceMotion ? 0.95 : 1)
+            .animation(.spring(response: 0.3, dampingFraction: 1), value: configuration.isPressed)
+    }
+}
 
 enum StickerKind: String, CaseIterable, Identifiable {
     case silk, drape, tag, swatches, ring, tape

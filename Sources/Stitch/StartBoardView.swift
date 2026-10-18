@@ -2,6 +2,7 @@ import SwiftUI
 
 struct StartBoardView: View {
     @State private var began = false
+    @Namespace private var zoom
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
@@ -16,11 +17,12 @@ struct StartBoardView: View {
             }
 
             Button {
-                began.toggle()
+                began = true
             } label: {
                 BoardCanvas()
             }
             .buttonStyle(BoardPress(reduceMotion: reduceMotion))
+            .matchedTransitionSource(id: "board", in: zoom)
             .accessibilityLabel("Board")
             .accessibilityHint("Tap the board to begin")
 
@@ -34,7 +36,11 @@ struct StartBoardView: View {
         .padding(.top, 4)
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
         .background(StitchColor.cream)
-        .sensoryFeedback(.impact(weight: .light, intensity: 0.6), trigger: began)
+        .sensoryFeedback(.impact(weight: .light, intensity: 0.6), trigger: began) { _, opened in opened }
+        .fullScreenCover(isPresented: $began) {
+            BoardEditorView()
+                .navigationTransition(.zoom(sourceID: "board", in: zoom))
+        }
     }
 }
 
