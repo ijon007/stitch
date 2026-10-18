@@ -1,4 +1,5 @@
 import PhotosUI
+import _PhotosUI_SwiftUI
 import SwiftUI
 
 enum DrawerTab: String, CaseIterable, Identifiable {
