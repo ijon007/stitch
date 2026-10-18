@@ -186,11 +186,22 @@ struct BoardEditorView: View {
     @State private var dragLocation: CGPoint?
     @State private var boardSize: CGSize = .zero
     @State private var confirmDiscard = false
+    @State private var export: BoardExport?
     @State private var added = 0
     @State private var undone = 0
 
     private var motion: Animation {
         reduceMotion ? .easeOut(duration: 0.18) : .spring(response: 0.34, dampingFraction: 1)
+    }
+
+    private var displayTitle: String {
+        let trimmed = title.trimmingCharacters(in: .whitespacesAndNewlines)
+        return trimmed.isEmpty ? "Untitled" : trimmed
+    }
+
+    private func slide(fromTrailing: Bool) -> AnyTransition {
+        if reduceMotion { return .opacity }
+        return .offset(x: fromTrailing ? 28 : -28).combined(with: .opacity)
     }
 
     private var binCenter: CGPoint {
@@ -203,18 +214,33 @@ struct BoardEditorView: View {
     }
 
     var body: some View {
-        ZStack(alignment: .bottom) {
-            editor
-            if let editingID {
-                TextStyleBar(text: textBinding(editingID))
-                    .padding(.bottom, 12)
-                    .transition(.opacity.combined(with: .offset(y: reduceMotion ? 0 : 10)))
+        ZStack {
+            if let export {
+                SaveBoardView(
+                    title: displayTitle,
+                    items: draft.items,
+                    aspect: boardSize.width / max(boardSize.height, 1),
+                    export: export,
+                    onBack: { withAnimation(motion) { self.export = nil } },
+                    onDone: { dismiss() }
+                )
+                .transition(slide(fromTrailing: true))
+            } else {
+                ZStack(alignment: .bottom) {
+                    editor
+                    if let editingID {
+                        TextStyleBar(text: textBinding(editingID))
+                            .padding(.bottom, 12)
+                            .transition(.opacity.combined(with: .offset(y: reduceMotion ? 0 : 10)))
+                    }
+                }
+                .animation(motion, value: editingID)
+                .transition(slide(fromTrailing: false))
             }
         }
-        .animation(motion, value: editingID)
         .background(StitchColor.cream)
-            .interactiveDismissDisabled(!draft.items.isEmpty)
-            .onAppear(perform: BoardDraftCheck.run)
+        .interactiveDismissDisabled(!draft.items.isEmpty)
+        .onAppear(perform: BoardDraftCheck.run)
     }
 
     private var editor: some View {
@@ -322,6 +348,7 @@ struct BoardEditorView: View {
                         shrinking: draggingID == item.id && overBin,
                         onTap: { beginEditing(item) },
                         onDrag: { location in
+                            if drawerOpen { withAnimation(motion) { drawerOpen = false } }
                             draggingID = item.id
                             dragLocation = location
                         },
@@ -409,6 +436,8 @@ struct BoardEditorView: View {
     private func save() {
         endEditing()
         focus = nil
+        let rendered = BoardExport.render(title: displayTitle, items: draft.items, aspect: boardSize.width / max(boardSize.height, 1))
+        withAnimation(motion) { export = rendered }
     }
 
     private func addText() {
