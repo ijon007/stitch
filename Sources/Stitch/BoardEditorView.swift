@@ -5,7 +5,7 @@ import UIKit
 
 struct BoardItem: Identifiable, Equatable {
     enum Content: Equatable {
-        case photo(UIImage)
+        case photo(UIImage, PhotoFrame)
         case sticker(StickerKind)
         case text(BoardText)
     }
@@ -153,6 +153,25 @@ enum BoardDraftCheck {
         draft.undo()
         assert(draft.items.isEmpty && !draft.canUndo)
         assert(BoardTextStyle.tape.next == .plain)
+        assert(PhotoFrame.plain.next == .polaroid)
+    }
+}
+
+enum PhotoFrame: String, CaseIterable, Identifiable {
+    case plain, polaroid
+
+    var id: String { rawValue }
+
+    var name: String {
+        switch self {
+        case .plain: "Plain"
+        case .polaroid: "Polaroid"
+        }
+    }
+
+    var next: PhotoFrame {
+        let all = Self.allCases
+        return all[(all.firstIndex(of: self)! + 1) % all.count]
     }
 }
 
@@ -229,9 +248,15 @@ struct BoardEditorView: View {
                 ZStack(alignment: .bottom) {
                     editor
                     if let editingID {
-                        TextStyleBar(text: textBinding(editingID))
-                            .padding(.bottom, 12)
-                            .transition(.opacity.combined(with: .offset(y: reduceMotion ? 0 : 10)))
+                        if draft.items.first(where: { $0.id == editingID })?.text != nil {
+                            TextStyleBar(text: textBinding(editingID))
+                                .padding(.bottom, 12)
+                                .transition(.opacity.combined(with: .offset(y: reduceMotion ? 0 : 10)))
+                        } else if let frame = photoFrameBinding(editingID) {
+                            PhotoStyleBar(frame: frame)
+                                .padding(.bottom, 12)
+                                .transition(.opacity.combined(with: .offset(y: reduceMotion ? 0 : 10)))
+                        }
                     }
                 }
                 .animation(motion, value: editingID)
@@ -455,9 +480,16 @@ struct BoardEditorView: View {
     private func beginEditing(_ item: BoardItem) {
         guard item.id != editingID else { return }
         endEditing()
-        guard item.text != nil else { return }
-        draft.beginSession()
-        editingID = item.id
+        switch item.content {
+        case .text:
+            draft.beginSession()
+            editingID = item.id
+        case .photo:
+            draft.beginSession()
+            editingID = item.id
+        case .sticker:
+            break
+        }
     }
 
     /// Drops text left blank, then folds the whole edit into a single undo step.
@@ -502,8 +534,25 @@ struct BoardEditorView: View {
         added += 1
     }
 
+    private func photoFrameBinding(_ id: UUID) -> Binding<PhotoFrame>? {
+        guard case .photo = draft.items.first(where: { $0.id == id })?.content else { return nil }
+        return Binding(
+            get: {
+                if case .photo(_, let frame) = draft.items.first(where: { $0.id == id })?.content { return frame }
+                return .plain
+            },
+            set: { frame in
+                draft.update { items in
+                    guard let index = items.firstIndex(where: { $0.id == id }),
+                          case .photo(let image, _) = items[index].content else { return }
+                    items[index].content = .photo(image, frame)
+                }
+            }
+        )
+    }
+
     private func addPhoto(_ image: UIImage) {
-        add(.photo(image))
+        add(.photo(image, .plain))
     }
 
     private func addSticker(_ kind: StickerKind) {
@@ -601,7 +650,7 @@ struct BoardItemContent: View {
 
     var body: some View {
         switch content {
-        case .photo(let image): BoardPhoto(image: image)
+        case .photo(let image, let frame): BoardPhoto(image: image, frame: frame)
         case .sticker(let kind): StickerView(kind: kind)
         case .text(let text):
             Text(text.string)
@@ -750,24 +799,67 @@ private struct TextStyleBar: View {
     }
 }
 
+private struct PhotoStyleBar: View {
+    @Binding var frame: PhotoFrame
+    @State private var taps = 0
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
+    var body: some View {
+        GlassEffectContainer(spacing: 8) {
+            HStack(spacing: 8) {
+                ForEach(PhotoFrame.allCases) { option in
+                    let isOn = frame == option
+                    Button {
+                        withAnimation(reduceMotion ? .easeOut(duration: 0.16) : .spring(response: 0.3, dampingFraction: 1)) {
+                            frame = option
+                        }
+                        taps += 1
+                    } label: {
+                        Text(option.name)
+                            .font(StitchFont.sans(16, weight: .semibold))
+                            .foregroundStyle(isOn ? StitchColor.cream : StitchColor.ink)
+                            .padding(.horizontal, 16)
+                            .frame(height: 44)
+                            .contentShape(Capsule())
+                    }
+                    .buttonStyle(.plain)
+                    .glassEffect(isOn ? Glass.regular.tint(StitchColor.ink).interactive() : Glass.regular.interactive(), in: .capsule)
+                    .accessibilityLabel("Photo style, \(option.name)")
+                    .accessibilityAddTraits(isOn ? [.isSelected] : [])
+                }
+            }
+            .padding(.horizontal, 16)
+        }
+        .sensoryFeedback(.selection, trigger: taps)
+    }
+}
+
 private struct BoardPhoto: View {
     var image: UIImage
+    var frame: PhotoFrame
 
     var body: some View {
         let ratio = min(max(image.size.height / max(image.size.width, 1), 0.7), 1.4)
-        Image(uiImage: image)
+        let photo = Image(uiImage: image)
             .resizable()
             .scaledToFill()
             .frame(width: 140, height: 140 * ratio)
-            .clipShape(RoundedRectangle(cornerRadius: 2, style: .continuous))
-            .padding(8)
-            .padding(.bottom, 20)
-            .background(StitchColor.paper, in: RoundedRectangle(cornerRadius: 4, style: .continuous))
-            .overlay {
-                RoundedRectangle(cornerRadius: 4, style: .continuous)
-                    .stroke(StitchColor.line, lineWidth: 1)
-            }
-            .shadow(color: StitchColor.ink.opacity(0.08), radius: 8, y: 4)
+            .clipShape(RoundedRectangle(cornerRadius: frame == .polaroid ? 2 : 8, style: .continuous))
+
+        switch frame {
+        case .plain:
+            photo
+        case .polaroid:
+            photo
+                .padding(8)
+                .padding(.bottom, 20)
+                .background(StitchColor.paper, in: RoundedRectangle(cornerRadius: 4, style: .continuous))
+                .overlay {
+                    RoundedRectangle(cornerRadius: 4, style: .continuous)
+                        .stroke(StitchColor.line, lineWidth: 1)
+                }
+                .shadow(color: StitchColor.ink.opacity(0.08), radius: 8, y: 4)
+        }
     }
 }
 
