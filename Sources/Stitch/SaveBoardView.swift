@@ -196,7 +196,7 @@ private struct InviteFriendsView: View {
                     .foregroundStyle(StitchColor.muted)
                     .lineLimit(2)
             }
-            .padding(.top, 8)
+            .padding(.top, 32)
             .accessibilityElement(children: .combine)
 
             ScrollView {
