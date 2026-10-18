@@ -4,6 +4,8 @@
 <dict>
 	<key>NSPhotoLibraryAddUsageDescription</key>
 	<string>Stitch saves your board to Photos so you can keep it.</string>
+	<key>NSPhotoLibraryUsageDescription</key>
+	<string>Stitch shows your photos so you can add them to a board.</string>
 	<key>UILaunchScreen</key>
 	<dict>
 		<key>UIImageName</key>

@@ -1,6 +1,6 @@
-import PhotosUI
-import _PhotosUI_SwiftUI
+import Photos
 import SwiftUI
+import UIKit
 
 enum DrawerTab: String, CaseIterable, Identifiable {
     case photos, stickers
@@ -19,7 +19,7 @@ struct BoardDrawer: View {
     var onAdd: ([BoardItem.Content]) -> Void
 
     @State private var tab: DrawerTab = .photos
-    @State private var picks: [PhotosPickerItem] = []
+    @State private var picks: [String] = []
     @State private var stickers: Set<StickerKind> = []
     @State private var adding = false
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
@@ -33,12 +33,7 @@ struct BoardDrawer: View {
 
             Group {
                 if tab == .photos {
-                    PhotosPicker("Photos", selection: $picks, maxSelectionCount: 24, selectionBehavior: .continuousAndOrdered, matching: .images)
-                        .photosPickerStyle(.inline)
-                        .photosPickerDisabledCapabilities([.selectionActions, .stagingArea])
-                        .photosPickerAccessoryVisibility(.hidden, edges: .all)
-                        .frame(maxWidth: .infinity, maxHeight: .infinity)
-                        .clipped()
+                    PhotoGrid(selection: $picks)
                 } else {
                     stickerGrid
                 }
@@ -108,19 +103,152 @@ struct BoardDrawer: View {
         guard !adding else { return }
         adding = true
         let chosen = stickers
-        let items = picks
+        let ids = picks
         Task {
             var contents: [BoardItem.Content] = []
-            for item in items {
-                guard let data = try? await item.loadTransferable(type: Data.self),
-                      let image = BoardPhotoLoader.image(from: data) else { continue }
+            for id in ids {
+                let side = BoardPhotoLoader.maxSide
+                guard let image = await PhotoLibrary.image(id, size: CGSize(width: side, height: side), fit: true) else { continue }
                 contents.append(.photo(image, .plain))
             }
             for kind in StickerKind.allCases where chosen.contains(kind) {
                 contents.append(.sticker(kind))
             }
-            await MainActor.run { onAdd(contents) }
+            onAdd(contents)
         }
+    }
+}
+
+/// Reads the photo library. Photos calls back on its own queues, so these stay off the main actor.
+enum PhotoLibrary {
+    nonisolated static func authorize() async -> Bool {
+        let status = await PHPhotoLibrary.requestAuthorization(for: .readWrite)
+        return status == .authorized || status == .limited
+    }
+
+    nonisolated static func recentIDs(limit: Int = 600) -> [String] {
+        let options = PHFetchOptions()
+        options.sortDescriptors = [NSSortDescriptor(key: "creationDate", ascending: false)]
+        options.fetchLimit = limit
+        let result = PHAsset.fetchAssets(with: .image, options: options)
+        var ids: [String] = []
+        ids.reserveCapacity(result.count)
+        result.enumerateObjects { asset, _, _ in ids.append(asset.localIdentifier) }
+        return ids
+    }
+
+    /// High-quality delivery calls back exactly once, which keeps the continuation safe.
+    nonisolated static func image(_ id: String, size: CGSize, fit: Bool) async -> UIImage? {
+        guard let asset = PHAsset.fetchAssets(withLocalIdentifiers: [id], options: nil).firstObject else { return nil }
+        let options = PHImageRequestOptions()
+        options.deliveryMode = .highQualityFormat
+        options.resizeMode = fit ? .exact : .fast
+        options.isNetworkAccessAllowed = true
+        return await withCheckedContinuation { continuation in
+            PHImageManager.default().requestImage(
+                for: asset,
+                targetSize: size,
+                contentMode: fit ? .aspectFit : .aspectFill,
+                options: options
+            ) { image, _ in
+                continuation.resume(returning: image)
+            }
+        }
+    }
+}
+
+private struct PhotoGrid: View {
+    @Binding var selection: [String]
+
+    @State private var ids: [String] = []
+    @State private var allowed: Bool?
+    @Environment(\.openURL) private var openURL
+
+    var body: some View {
+        Group {
+            switch allowed {
+            case nil:
+                ProgressView()
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+            case false:
+                VStack(spacing: 12) {
+                    Text("Stitch can’t see your photos")
+                        .font(StitchFont.display(22))
+                        .foregroundStyle(StitchColor.ink)
+                    Button("Open Settings") {
+                        if let url = URL(string: UIApplication.openSettingsURLString) { openURL(url) }
+                    }
+                    .font(StitchFont.sans(15, weight: .semibold))
+                    .buttonStyle(.glass)
+                    .buttonBorderShape(.capsule)
+                }
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+            case true:
+                ScrollView {
+                    LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 2), count: 4), spacing: 2) {
+                        ForEach(ids, id: \.self) { id in
+                            cell(id)
+                        }
+                    }
+                    .padding(.bottom, 16)
+                }
+                .scrollIndicators(.hidden)
+            }
+        }
+        .task {
+            let granted = await PhotoLibrary.authorize()
+            if granted { ids = PhotoLibrary.recentIDs() }
+            allowed = granted
+        }
+    }
+
+    private func cell(_ id: String) -> some View {
+        let order = selection.firstIndex(of: id)
+        return Button {
+            if let order { selection.remove(at: order) } else { selection.append(id) }
+        } label: {
+            PhotoThumb(id: id)
+                .aspectRatio(1, contentMode: .fill)
+                .overlay {
+                    if order != nil {
+                        Rectangle().stroke(StitchColor.accent, lineWidth: 3)
+                    }
+                }
+                .overlay(alignment: .topTrailing) {
+                    if let order {
+                        Text("\(order + 1)")
+                            .font(StitchFont.sans(12, weight: .bold))
+                            .foregroundStyle(StitchColor.cream)
+                            .frame(width: 22, height: 22)
+                            .background(StitchColor.accent, in: Circle())
+                            .padding(6)
+                    }
+                }
+                .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel("Photo")
+        .accessibilityAddTraits(order != nil ? [.isSelected] : [])
+    }
+}
+
+private struct PhotoThumb: View {
+    var id: String
+    @State private var image: UIImage?
+
+    var body: some View {
+        Color(StitchColor.slot)
+            .overlay {
+                if let image {
+                    Image(uiImage: image)
+                        .resizable()
+                        .scaledToFill()
+                }
+            }
+            .clipped()
+            .task(id: id) {
+                image = await PhotoLibrary.image(id, size: CGSize(width: 240, height: 240), fit: false)
+            }
     }
 }
 
