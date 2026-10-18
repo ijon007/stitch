@@ -95,7 +95,7 @@ private struct GhostCollage: View {
                     .opacity(0.55)
                     .rotationEffect(.degrees(-9))
                     .offset(x: 22, y: 36)
-                silk
+                StickerView(kind: .silk)
                     .opacity(0.75)
                     .rotationEffect(.degrees(11))
                     .offset(x: 210, y: 72)
@@ -113,20 +113,18 @@ private struct GhostCollage: View {
                 tape(width: 16, height: 86, opacity: 0.14)
                     .rotationEffect(.degrees(-18))
                     .offset(x: 198, y: 228)
-                Circle()
-                    .stroke(StitchColor.accent.opacity(0.45), style: StrokeStyle(lineWidth: 1.4, dash: [3, 3]))
-                    .frame(width: 56, height: 56)
+                StickerView(kind: .ring)
                     .rotationEffect(.degrees(-12))
                     .offset(x: 258, y: 318)
-                drape
+                StickerView(kind: .drape)
                     .opacity(0.75)
                     .rotationEffect(.degrees(4))
                     .offset(x: 104, y: 388)
-                tag
+                StickerView(kind: .tag)
                     .opacity(0.65)
                     .rotationEffect(.degrees(-8))
                     .offset(x: 252, y: 468)
-                swatches
+                StickerView(kind: .swatches)
                     .opacity(0.75)
                     .rotationEffect(.degrees(-5))
                     .offset(x: 22, y: 528)
@@ -171,65 +169,9 @@ private struct GhostCollage: View {
             .frame(width: 72, height: 90)
     }
 
-    private var silk: some View {
-        RoundedRectangle(cornerRadius: 18, style: .continuous)
-            .fill(StitchColor.silk)
-            .frame(width: 92, height: 92)
-            .overlay {
-                Text("silk")
-                    .font(StitchFont.display(22))
-                    .foregroundStyle(StitchColor.accent)
-            }
-    }
-
     private func tape(width: CGFloat, height: CGFloat, opacity: Double) -> some View {
         RoundedRectangle(cornerRadius: 2, style: .continuous)
             .fill(StitchColor.accent.opacity(opacity))
             .frame(width: width, height: height)
-    }
-
-    private var drape: some View {
-        Text("drape")
-            .font(StitchFont.display(18))
-            .foregroundStyle(StitchColor.ink)
-            .padding(.horizontal, 14)
-            .padding(.vertical, 8)
-            .background(StitchColor.paper, in: RoundedRectangle(cornerRadius: 3, style: .continuous))
-            .overlay {
-                RoundedRectangle(cornerRadius: 3, style: .continuous)
-                    .stroke(StitchColor.line, lineWidth: 1)
-            }
-    }
-
-    private var swatches: some View {
-        HStack(spacing: -2) {
-            swatch(StitchColor.ink)
-            swatch(StitchColor.accent)
-            swatch(StitchColor.swatchStone)
-        }
-    }
-
-    private func swatch(_ color: Color) -> some View {
-        Rectangle().fill(color).frame(width: 34, height: 34)
-    }
-
-    private var tag: some View {
-        VStack(spacing: 8) {
-            Circle()
-                .stroke(StitchColor.line, lineWidth: 1)
-                .frame(width: 10, height: 10)
-            Text("SS26")
-                .font(StitchFont.sans(11, weight: .semibold))
-                .tracking(1.4)
-                .foregroundStyle(StitchColor.muted)
-        }
-        .padding(.top, 12)
-        .padding(.bottom, 10)
-        .frame(width: 70, height: 86)
-        .background(StitchColor.background, in: RoundedRectangle(cornerRadius: 2, style: .continuous))
-        .overlay {
-            RoundedRectangle(cornerRadius: 2, style: .continuous)
-                .stroke(StitchColor.line, lineWidth: 1)
-        }
     }
 }
