@@ -1,3 +1,7 @@
 version: 1
 bundleID: com.example.Stitch
 iconPath: Assets/AppIcon.png
+infoPath: Info.plist
+resources:
+  - Assets/LaunchScreen@2x.png
+  - Assets/LaunchScreen@3x.png
