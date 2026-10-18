@@ -325,7 +325,7 @@ struct BoardEditorView: View {
                             .padding(.horizontal, 6)
                             .contentShape(Rectangle())
                     }
-                    .accessibilityHint("Finish editing text")
+                    .accessibilityHint("Finish editing")
                 } else {
                     Button(action: save) {
                         Text("Save")
@@ -368,8 +368,9 @@ struct BoardEditorView: View {
                     BoardItemView(
                         item: item,
                         board: geo.size,
-                        editing: item.id == editingID ? textBinding(item.id) : nil,
+                        editing: item.id == editingID && item.text != nil ? textBinding(item.id) : nil,
                         focus: $focus,
+                        selected: item.id == editingID,
                         dimmed: editingID != nil && item.id != editingID,
                         shrinking: draggingID == item.id && overBin,
                         onTap: { beginEditing(item) },
@@ -593,6 +594,7 @@ private struct BoardItemView: View {
     var board: CGSize
     var editing: Binding<BoardText>?
     var focus: FocusState<BoardFocus?>.Binding
+    var selected: Bool
     var dimmed: Bool
     var shrinking: Bool
     var onTap: () -> Void
@@ -626,7 +628,15 @@ private struct BoardItemView: View {
             TextEditingField(text: editing, focus: focus)
         } else {
             BoardItemContent(content: item.content)
+                .padding(selected ? 4 : 0)
+                .overlay {
+                    if selected {
+                        RoundedRectangle(cornerRadius: 10, style: .continuous)
+                            .stroke(StitchColor.accent, style: StrokeStyle(lineWidth: 1.5, dash: [5, 4]))
+                    }
+                }
                 .accessibilityElement(children: .ignore)
+                .accessibilityAddTraits(selected ? [.isSelected] : [])
         }
     }
 
