@@ -34,7 +34,7 @@ struct BoardDrawer: View {
 
             switch tab {
             case .photos:
-                PhotosPicker("Photos", selection: $pick, matching: .images, photoLibrary: .shared())
+                PhotosPicker("Photos", selection: $pick, matching: .images)
                     .photosPickerStyle(.inline)
                     .photosPickerDisabledCapabilities([.selectionActions, .stagingArea])
                     .photosPickerAccessoryVisibility(.hidden, edges: .all)
