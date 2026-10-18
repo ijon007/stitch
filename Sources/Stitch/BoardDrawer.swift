@@ -25,26 +25,25 @@ struct BoardDrawer: View {
 
     var body: some View {
         VStack(spacing: 14) {
-            Picker("Add", selection: $tab) {
-                ForEach(DrawerTab.allCases) { item in
-                    Text(item.title).tag(item)
+            DrawerTabs(tab: $tab)
+                .padding(.horizontal, 16)
+
+            Group {
+                if tab == .photos {
+                    PhotosPicker(selection: $pick, matching: .images)
+                        .photosPickerStyle(.inline)
+                        .photosPickerDisabledCapabilities([.selectionActions, .stagingArea])
+                        .photosPickerAccessoryVisibility(.hidden, edges: .all)
+                        .frame(maxWidth: .infinity, maxHeight: .infinity)
+                        .clipped()
+                } else {
+                    stickers
                 }
             }
-            .pickerStyle(.segmented)
-            .padding(.horizontal, 16)
-
-            switch tab {
-            case .photos:
-                PhotosPicker("Photos", selection: $pick, matching: .images)
-                    .photosPickerStyle(.inline)
-                    .photosPickerDisabledCapabilities([.selectionActions, .stagingArea])
-                    .photosPickerAccessoryVisibility(.hidden, edges: .all)
-            case .stickers:
-                stickers
-            }
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
-        .padding(.top, 22)
-        .frame(maxHeight: .infinity, alignment: .top)
+        .padding(.top, 10)
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
         .sensoryFeedback(.selection, trigger: tab)
         .onChange(of: pick) { _, item in
             guard let item else { return }
@@ -92,6 +91,45 @@ enum BoardPhotoLoader {
         guard longest > maxSide else { return image }
         let k = maxSide / longest
         return image.preparingThumbnail(of: CGSize(width: image.size.width * k, height: image.size.height * k)) ?? image
+    }
+}
+
+private struct DrawerTabs: View {
+    @Binding var tab: DrawerTab
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
+    var body: some View {
+        HStack(spacing: 0) {
+            ForEach(DrawerTab.allCases) { item in
+                Button {
+                    tab = item
+                } label: {
+                    Text(item.title)
+                        .font(StitchFont.sans(15, weight: .semibold))
+                        .foregroundStyle(tab == item ? StitchColor.ink : StitchColor.muted)
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 10)
+                        .contentShape(Capsule())
+                }
+                .buttonStyle(DrawerPress(reduceMotion: reduceMotion))
+                .accessibilityAddTraits(tab == item ? [.isSelected] : [])
+            }
+        }
+        .background {
+            GeometryReader { geo in
+                let width = geo.size.width / CGFloat(DrawerTab.allCases.count)
+                Capsule()
+                    .fill(Color.white.opacity(0.42))
+                    .glassEffect(.regular.interactive(), in: .capsule)
+                    .frame(width: width, height: geo.size.height)
+                    .offset(x: width * CGFloat(DrawerTab.allCases.firstIndex(of: tab) ?? 0))
+                    .animation(reduceMotion ? .easeOut(duration: 0.16) : .spring(response: 0.32, dampingFraction: 1), value: tab)
+            }
+        }
+        .padding(4)
+        .glassEffect(.regular, in: .capsule)
+        .accessibilityElement(children: .contain)
+        .accessibilityLabel("Add")
     }
 }
 
