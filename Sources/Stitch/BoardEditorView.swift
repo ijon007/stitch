@@ -7,6 +7,7 @@ struct BoardItem: Identifiable, Equatable {
     enum Content: Equatable {
         case photo(UIImage)
         case sticker(StickerKind)
+        case text(BoardText)
     }
 
     let id = UUID()
@@ -20,7 +21,85 @@ struct BoardItem: Identifiable, Equatable {
         switch content {
         case .photo: "Photo"
         case .sticker(let kind): kind.label
+        case .text(let text): text.string.isEmpty ? "Text" : text.string
         }
+    }
+
+    var text: BoardText? {
+        if case .text(let text) = content { return text }
+        return nil
+    }
+}
+
+struct BoardText: Equatable {
+    var string = ""
+    var font: BoardFont = .editorial
+    var style: BoardTextStyle = .plain
+    var bold = false
+    var italic = false
+    var underline = false
+
+    var isBlank: Bool { string.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
+}
+
+enum BoardFont: String, CaseIterable, Identifiable {
+    case editorial, clean, classic, round, mono
+
+    var id: String { rawValue }
+
+    var name: String {
+        switch self {
+        case .editorial: "Editorial"
+        case .clean: "Clean"
+        case .classic: "Classic"
+        case .round: "Round"
+        case .mono: "Mono"
+        }
+    }
+
+    func font(_ size: CGFloat) -> Font {
+        switch self {
+        case .editorial: StitchFont.display(size)
+        case .clean: StitchFont.sans(size, weight: .medium)
+        case .classic: .system(size: size, design: .serif)
+        case .round: .system(size: size, weight: .semibold, design: .rounded)
+        case .mono: .system(size: size, weight: .medium, design: .monospaced)
+        }
+    }
+}
+
+enum BoardTextStyle: CaseIterable {
+    case plain, label, silk, tape
+
+    var name: String {
+        switch self {
+        case .plain: "Plain"
+        case .label: "Label"
+        case .silk: "Silk"
+        case .tape: "Tape"
+        }
+    }
+
+    var ink: Color {
+        switch self {
+        case .plain, .label: StitchColor.ink
+        case .silk: StitchColor.accent
+        case .tape: StitchColor.cream
+        }
+    }
+
+    var fill: Color? {
+        switch self {
+        case .plain: nil
+        case .label: StitchColor.paper
+        case .silk: StitchColor.silk
+        case .tape: StitchColor.accent
+        }
+    }
+
+    var next: BoardTextStyle {
+        let all = Self.allCases
+        return all[(all.firstIndex(of: self)! + 1) % all.count]
     }
 }
 
@@ -73,6 +152,7 @@ enum BoardDraftCheck {
         draft.endSession()
         draft.undo()
         assert(draft.items.isEmpty && !draft.canUndo)
+        assert(BoardTextStyle.tape.next == .plain)
     }
 }
 
@@ -101,6 +181,7 @@ struct BoardEditorView: View {
     @State private var title = ""
     @State private var draft = BoardDraft()
     @State private var drawerOpen = false
+    @State private var editingID: UUID?
     @State private var draggingID: UUID?
     @State private var dragLocation: CGPoint?
     @State private var boardSize: CGSize = .zero
@@ -122,8 +203,16 @@ struct BoardEditorView: View {
     }
 
     var body: some View {
-        editor
-            .background(StitchColor.cream)
+        ZStack(alignment: .bottom) {
+            editor
+            if let editingID {
+                TextStyleBar(text: textBinding(editingID))
+                    .padding(.bottom, 12)
+                    .transition(.opacity.combined(with: .offset(y: reduceMotion ? 0 : 10)))
+            }
+        }
+        .animation(motion, value: editingID)
+        .background(StitchColor.cream)
             .interactiveDismissDisabled(!draft.items.isEmpty)
             .onAppear(perform: BoardDraftCheck.run)
     }
@@ -175,15 +264,27 @@ struct BoardEditorView: View {
 
                 Spacer()
 
-                Button(action: save) {
-                    Text("Save")
-                        .font(StitchFont.sans(16, weight: .semibold))
-                        .foregroundStyle(draft.items.isEmpty ? StitchColor.muted : StitchColor.accent)
-                        .frame(height: 44)
-                        .padding(.horizontal, 6)
-                        .contentShape(Rectangle())
+                if editingID != nil {
+                    Button(action: endEditing) {
+                        Text("Done")
+                            .font(StitchFont.sans(16, weight: .semibold))
+                            .foregroundStyle(StitchColor.ink)
+                            .frame(height: 44)
+                            .padding(.horizontal, 6)
+                            .contentShape(Rectangle())
+                    }
+                    .accessibilityHint("Finish editing text")
+                } else {
+                    Button(action: save) {
+                        Text("Save")
+                            .font(StitchFont.sans(16, weight: .semibold))
+                            .foregroundStyle(draft.items.isEmpty ? StitchColor.muted : StitchColor.accent)
+                            .frame(height: 44)
+                            .padding(.horizontal, 6)
+                            .contentShape(Rectangle())
+                    }
+                    .disabled(draft.items.isEmpty)
                 }
-                .disabled(draft.items.isEmpty)
             }
             .buttonStyle(.plain)
         }
@@ -198,7 +299,10 @@ struct BoardEditorView: View {
             ZStack {
                 StitchColor.slot
                     .contentShape(Rectangle())
-                    .onTapGesture { focus = nil }
+                    .onTapGesture {
+                        focus = nil
+                        endEditing()
+                    }
 
                 if draft.items.isEmpty && !drawerOpen {
                     Text("Add photos, stickers or words")
@@ -212,7 +316,11 @@ struct BoardEditorView: View {
                     BoardItemView(
                         item: item,
                         board: geo.size,
+                        editing: item.id == editingID ? textBinding(item.id) : nil,
+                        focus: $focus,
+                        dimmed: editingID != nil && item.id != editingID,
                         shrinking: draggingID == item.id && overBin,
+                        onTap: { beginEditing(item) },
                         onDrag: { location in
                             draggingID = item.id
                             dragLocation = location
@@ -233,18 +341,28 @@ struct BoardEditorView: View {
         }
         .onGeometryChange(for: CGSize.self) { $0.size } action: { boardSize = $0 }
         .overlay(alignment: .topTrailing) {
-            if draggingID == nil {
+            if draggingID == nil && editingID == nil {
                 VStack(spacing: 10) {
                     floatingButton(drawerOpen ? "chevron.down" : "plus", label: drawerOpen ? "Close drawer" : "Add photos or stickers") {
                         withAnimation(motion) { drawerOpen.toggle() }
                     }
+                    Button(action: addText) {
+                        Text("T")
+                            .font(StitchFont.sans(17, weight: .semibold))
+                            .foregroundStyle(StitchColor.ink)
+                            .frame(width: 36, height: 36)
+                    }
+                    .buttonStyle(.glass)
+                    .buttonBorderShape(.circle)
+                    .controlSize(.small)
+                    .accessibilityLabel("Add text")
                 }
                 .padding(12)
                 .transition(.opacity)
             }
         }
         .overlay(alignment: .topLeading) {
-            if draft.canUndo && draggingID == nil {
+            if draft.canUndo && draggingID == nil && editingID == nil {
                 floatingButton("arrow.uturn.backward", label: "Undo", action: undo)
                     .padding(12)
                     .transition(.opacity.combined(with: .scale(scale: 0.8)))
@@ -253,6 +371,7 @@ struct BoardEditorView: View {
         .clipped()
         .ignoresSafeArea(edges: .bottom)
         .animation(motion, value: draggingID == nil)
+        .animation(motion, value: editingID == nil)
         .animation(motion, value: overBin)
         .animation(motion, value: draft.canUndo)
     }
@@ -288,7 +407,50 @@ struct BoardEditorView: View {
     }
 
     private func save() {
+        endEditing()
         focus = nil
+    }
+
+    private func addText() {
+        endEditing()
+        let item = BoardItem(content: .text(BoardText()), center: CGPoint(x: 0.5, y: 0.3))
+        draft.beginSession()
+        withAnimation(motion) {
+            draft.update { $0.append(item) }
+            drawerOpen = false
+        }
+        editingID = item.id
+        added += 1
+    }
+
+    private func beginEditing(_ item: BoardItem) {
+        guard item.id != editingID else { return }
+        endEditing()
+        guard item.text != nil else { return }
+        draft.beginSession()
+        editingID = item.id
+    }
+
+    /// Drops text left blank, then folds the whole edit into a single undo step.
+    private func endEditing() {
+        guard let id = editingID else { return }
+        withAnimation(motion) {
+            draft.update { $0.removeAll { $0.id == id && $0.text?.isBlank == true } }
+            editingID = nil
+        }
+        draft.endSession()
+        focus = nil
+    }
+
+    private func textBinding(_ id: UUID) -> Binding<BoardText> {
+        Binding(
+            get: { draft.items.first { $0.id == id }?.text ?? BoardText() },
+            set: { text in
+                draft.update { items in
+                    if let index = items.firstIndex(where: { $0.id == id }) { items[index].content = .text(text) }
+                }
+            }
+        )
     }
 
     private func undo() {
@@ -354,7 +516,11 @@ private struct BoardItemView: View {
 
     var item: BoardItem
     var board: CGSize
+    var editing: Binding<BoardText>?
+    var focus: FocusState<BoardFocus?>.Binding
+    var dimmed: Bool
     var shrinking: Bool
+    var onTap: () -> Void
     var onDrag: (CGPoint) -> Void
     var onCommit: (LiveTransform) -> Void
     var onDelete: () -> Void
@@ -363,18 +529,30 @@ private struct BoardItemView: View {
 
     var body: some View {
         let unit = board.width / 360
-        BoardItemContent(content: item.content)
-            .simultaneousGesture(transform)
+        // Text being edited lifts clear of the keyboard, then settles back.
+        let y = editing == nil ? item.center.y : min(item.center.y, 0.3)
+        visual
+            .gesture(TapGesture().onEnded { onTap() }, isEnabled: editing == nil)
+            .simultaneousGesture(transform, isEnabled: editing == nil && !dimmed)
             .scaleEffect(item.scale * live.scale * unit * (shrinking ? 0.55 : 1))
             .rotationEffect(item.rotation + live.rotation)
-            .opacity(shrinking ? 0.7 : 1)
+            .opacity(dimmed ? 0.35 : shrinking ? 0.7 : 1)
             .position(
                 x: item.center.x * board.width + live.offset.width,
-                y: item.center.y * board.height + live.offset.height
+                y: y * board.height + live.offset.height
             )
-            .accessibilityElement(children: .ignore)
             .accessibilityLabel(item.accessibilityName)
             .accessibilityAction(named: "Delete", onDelete)
+    }
+
+    @ViewBuilder
+    private var visual: some View {
+        if let editing {
+            TextEditingField(text: editing, focus: focus)
+        } else {
+            BoardItemContent(content: item.content)
+                .accessibilityElement(children: .ignore)
+        }
     }
 
     private var transform: some Gesture {
@@ -396,7 +574,150 @@ struct BoardItemContent: View {
         switch content {
         case .photo(let image): BoardPhoto(image: image)
         case .sticker(let kind): StickerView(kind: kind)
+        case .text(let text):
+            Text(text.string)
+                .boardGlyphs(text)
+                .frame(maxWidth: 280)
+                .fixedSize()
+                .boardChip(text.style)
         }
+    }
+}
+
+private struct TextEditingField: View {
+    @Binding var text: BoardText
+    var focus: FocusState<BoardFocus?>.Binding
+
+    var body: some View {
+        // The hidden Text sizes the field so it hugs and wraps like the finished label.
+        Text(text.string.isEmpty ? "Type something" : text.string + " ")
+            .boardGlyphs(text)
+            .frame(maxWidth: 280)
+            .fixedSize()
+            .opacity(0)
+            .overlay {
+                TextField("Type something", text: $text.string, axis: .vertical)
+                    .boardGlyphs(text)
+                    .tint(text.style == .tape ? StitchColor.cream : StitchColor.accent)
+                    .focused(focus, equals: .text)
+                    .onAppear { focus.wrappedValue = .text }
+            }
+            .boardChip(text.style)
+    }
+}
+
+private extension View {
+    func boardGlyphs(_ text: BoardText) -> some View {
+        font(text.font.font(28))
+            .bold(text.bold)
+            .italic(text.italic)
+            .underline(text.underline)
+            .foregroundStyle(text.style.ink)
+            .multilineTextAlignment(.center)
+    }
+
+    func boardChip(_ style: BoardTextStyle) -> some View {
+        padding(.horizontal, style.fill == nil ? 4 : 14)
+            .padding(.vertical, style.fill == nil ? 2 : 8)
+            .background(style.fill ?? .clear, in: RoundedRectangle(cornerRadius: 6, style: .continuous))
+            .overlay {
+                if style == .label {
+                    RoundedRectangle(cornerRadius: 6, style: .continuous)
+                        .stroke(StitchColor.line, lineWidth: 1)
+                }
+            }
+    }
+}
+
+// MARK: - Text style bar
+
+private struct TextStyleBar: View {
+    @Binding var text: BoardText
+    @State private var taps = 0
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
+    var body: some View {
+        ScrollView(.horizontal) {
+            GlassEffectContainer(spacing: 8) {
+                HStack(spacing: 8) {
+                    Button {
+                        apply { $0.style = $0.style.next }
+                    } label: {
+                        Text("A")
+                            .font(StitchFont.display(18, weight: .medium))
+                            .foregroundStyle(text.style.ink)
+                            .frame(width: 26, height: 26)
+                            .background(text.style.fill ?? .clear, in: RoundedRectangle(cornerRadius: 7, style: .continuous))
+                            .overlay {
+                                if text.style.fill == nil || text.style == .label {
+                                    RoundedRectangle(cornerRadius: 7, style: .continuous)
+                                        .stroke(StitchColor.dash, lineWidth: 1)
+                                }
+                            }
+                            .frame(width: 44, height: 44)
+                            .contentShape(Circle())
+                    }
+                    .buttonStyle(.plain)
+                    .glassEffect(.regular.interactive(), in: .circle)
+                    .accessibilityLabel("Text style, \(text.style.name)")
+
+                    toggle("bold", label: "Bold", isOn: text.bold) { $0.bold.toggle() }
+                    toggle("italic", label: "Italic", isOn: text.italic) { $0.italic.toggle() }
+                    toggle("underline", label: "Underline", isOn: text.underline) { $0.underline.toggle() }
+
+                    Capsule()
+                        .fill(StitchColor.dash)
+                        .frame(width: 1, height: 22)
+                        .padding(.horizontal, 4)
+                        .accessibilityHidden(true)
+
+                    ForEach(BoardFont.allCases) { font in
+                        let isOn = text.font == font
+                        Button {
+                            apply { $0.font = font }
+                        } label: {
+                            Text(font.name)
+                                .font(font.font(16))
+                                .foregroundStyle(isOn ? StitchColor.cream : StitchColor.ink)
+                                .padding(.horizontal, 16)
+                                .frame(height: 44)
+                                .contentShape(Capsule())
+                        }
+                        .buttonStyle(.plain)
+                        .glassEffect(isOn ? Glass.regular.tint(StitchColor.ink).interactive() : Glass.regular.interactive(), in: .capsule)
+                        .accessibilityLabel("Font, \(font.name)")
+                        .accessibilityAddTraits(isOn ? [.isSelected] : [])
+                    }
+                }
+                .padding(.horizontal, 16)
+            }
+        }
+        .scrollIndicators(.hidden)
+        .scrollClipDisabled()
+        .sensoryFeedback(.selection, trigger: taps)
+    }
+
+    private func toggle(_ symbol: String, label: String, isOn: Bool, edit: @escaping (inout BoardText) -> Void) -> some View {
+        Button {
+            apply(edit)
+        } label: {
+            Image(systemName: symbol)
+                .font(.system(size: 16, weight: .semibold))
+                .foregroundStyle(isOn ? StitchColor.cream : StitchColor.ink)
+                .frame(width: 44, height: 44)
+                .contentShape(Circle())
+        }
+        .buttonStyle(.plain)
+        .glassEffect(isOn ? Glass.regular.tint(StitchColor.ink).interactive() : Glass.regular.interactive(), in: .circle)
+        .accessibilityLabel(label)
+        .accessibilityAddTraits(isOn ? [.isSelected] : [])
+    }
+
+    private func apply(_ edit: (inout BoardText) -> Void) {
+        withAnimation(reduceMotion ? .easeOut(duration: 0.16) : .spring(response: 0.3, dampingFraction: 1)) {
+            edit(&text)
+        }
+        taps += 1
     }
 }
 
