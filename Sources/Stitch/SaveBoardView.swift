@@ -1,9 +1,9 @@
+import Photos
 import SwiftUI
 
 struct BoardExport {
     var image: Image
     var png: URL
-    var pdf: URL
 
     /// Renders the board at a fixed 360pt width (3x) so exports look the same on every device.
     @MainActor
@@ -13,23 +13,13 @@ struct BoardExport {
         renderer.scale = 3
         guard let image = renderer.uiImage, let data = image.pngData() else { return nil }
 
-        let name = fileName(title)
-        let png = URL.temporaryDirectory.appending(path: "\(name).png")
-        let pdf = URL.temporaryDirectory.appending(path: "\(name).pdf")
+        let png = URL.temporaryDirectory.appending(path: "\(fileName(title)).png")
         do {
             try data.write(to: png)
         } catch {
             return nil
         }
-        renderer.render { size, draw in
-            var box = CGRect(origin: .zero, size: size)
-            guard let context = CGContext(pdf as CFURL, mediaBox: &box, nil) else { return }
-            context.beginPDFPage(nil)
-            draw(context)
-            context.endPDFPage()
-            context.closePDF()
-        }
-        return BoardExport(image: Image(uiImage: image), png: png, pdf: pdf)
+        return BoardExport(image: Image(uiImage: image), png: png)
     }
 
     static func fileName(_ title: String) -> String {
@@ -57,11 +47,8 @@ struct SaveBoardView: View {
     var onDone: () -> Void
 
     @State private var finished = false
-
-    private var inviteURL: URL {
-        let slug = BoardExport.fileName(title).lowercased().split(separator: " ").joined(separator: "-")
-        return URL(string: "https://stitch.app/b/\(slug.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed) ?? "board")")!
-    }
+    @State private var savedPhotos = false
+    @State private var saveFailed = false
 
     var body: some View {
         VStack(spacing: 18) {
@@ -131,19 +118,51 @@ struct SaveBoardView: View {
                 .buttonStyle(.glass)
                 .buttonBorderShape(.capsule)
 
-                HStack(spacing: 28) {
-                    ShareLink(item: export.png) { Text("Export PNG") }
-                    ShareLink(item: export.pdf) { Text("Export PDF") }
+                Button(action: saveToPhotos) {
+                    Text(savedPhotos ? "Saved to Photos" : "Save to Photos")
+                        .font(StitchFont.sans(16, weight: .semibold))
+                        .foregroundStyle(StitchColor.ink)
+                        .frame(maxWidth: .infinity)
+                        .frame(height: 40)
+                        .contentTransition(.opacity)
                 }
-                .font(StitchFont.sans(14, weight: .medium))
-                .foregroundStyle(StitchColor.muted)
-                .frame(height: 36)
+                .buttonStyle(.glass)
+                .buttonBorderShape(.capsule)
+                .disabled(savedPhotos)
+                .accessibilityHint("Saves the board into your photo library")
             }
             .padding(.horizontal, 16)
             .padding(.bottom, 8)
         }
         .background(StitchColor.cream)
         .sensoryFeedback(.success, trigger: finished)
+        .sensoryFeedback(.success, trigger: savedPhotos)
+        .alert("Couldn’t save to Photos", isPresented: $saveFailed) {
+            Button("OK", role: .cancel) {}
+        }
         .onAppear(perform: BoardExportCheck.run)
+    }
+
+    private var inviteURL: URL {
+        let slug = BoardExport.fileName(title).lowercased().split(separator: " ").joined(separator: "-")
+        return URL(string: "https://stitch.app/b/\(slug.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed) ?? "board")")!
+    }
+
+    private func saveToPhotos() {
+        Task {
+            let status = await PHPhotoLibrary.requestAuthorization(for: .addOnly)
+            guard status == .authorized || status == .limited else {
+                saveFailed = true
+                return
+            }
+            do {
+                try await PHPhotoLibrary.shared().performChanges {
+                    PHAssetChangeRequest.creationRequestForAssetFromImage(atFileURL: export.png)
+                }
+                savedPhotos = true
+            } catch {
+                saveFailed = true
+            }
+        }
     }
 }
