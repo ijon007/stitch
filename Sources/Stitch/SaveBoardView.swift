@@ -152,20 +152,28 @@ struct SaveBoardView: View {
     }
 
     private func saveToPhotos() {
+        let png = export.png
         Task {
-            let status = await PHPhotoLibrary.requestAuthorization(for: .addOnly)
-            guard status == .authorized || status == .limited else {
-                saveFailed = true
-                return
-            }
-            do {
-                try await PHPhotoLibrary.shared().performChanges {
-                    PHAssetChangeRequest.creationRequestForAssetFromImage(atFileURL: export.png)
-                }
+            if await PhotoLibrarySaver.save(png) {
                 savedPhotos = true
-            } catch {
+            } else {
                 saveFailed = true
             }
+        }
+    }
+}
+
+/// Photos runs these callbacks on its own queue, so they must stay off the main actor.
+enum PhotoLibrarySaver {
+    nonisolated static func save(_ url: URL) async -> Bool {
+        let status = await PHPhotoLibrary.requestAuthorization(for: .addOnly)
+        guard status == .authorized || status == .limited else { return false }
+        return await withCheckedContinuation { continuation in
+            PHPhotoLibrary.shared().performChanges({
+                PHAssetChangeRequest.creationRequestForAssetFromImage(atFileURL: url)
+            }, completionHandler: { success, _ in
+                continuation.resume(returning: success)
+            })
         }
     }
 }
