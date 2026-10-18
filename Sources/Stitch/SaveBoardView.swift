@@ -49,6 +49,7 @@ struct SaveBoardView: View {
     @State private var finished = false
     @State private var savedPhotos = false
     @State private var saveFailed = false
+    @State private var inviting = false
 
     var body: some View {
         VStack(spacing: 18) {
@@ -108,7 +109,9 @@ struct SaveBoardView: View {
                 .buttonBorderShape(.capsule)
                 .tint(StitchColor.accent)
 
-                ShareLink(item: inviteURL, message: Text("Add to “\(title)” with me on Stitch")) {
+                Button {
+                    inviting = true
+                } label: {
                     Text("Collaborate")
                         .font(StitchFont.sans(16, weight: .semibold))
                         .foregroundStyle(StitchColor.ink)
@@ -140,12 +143,12 @@ struct SaveBoardView: View {
         .alert("Couldn’t save to Photos", isPresented: $saveFailed) {
             Button("OK", role: .cancel) {}
         }
+        .sheet(isPresented: $inviting) {
+            InviteFriendsView(title: title)
+                .presentationDetents([.medium, .large])
+                .presentationDragIndicator(.visible)
+        }
         .onAppear(perform: BoardExportCheck.run)
-    }
-
-    private var inviteURL: URL {
-        let slug = BoardExport.fileName(title).lowercased().split(separator: " ").joined(separator: "-")
-        return URL(string: "https://stitch.app/b/\(slug.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed) ?? "board")")!
     }
 
     private func saveToPhotos() {
@@ -164,5 +167,81 @@ struct SaveBoardView: View {
                 saveFailed = true
             }
         }
+    }
+}
+
+private struct InviteFriendsView: View {
+    var title: String
+
+    @Environment(\.dismiss) private var dismiss
+    @State private var selected: Set<String> = []
+    @State private var sent = false
+
+    var body: some View {
+        VStack(spacing: 16) {
+            VStack(spacing: 4) {
+                Text("Invite friends")
+                    .font(StitchFont.display(26))
+                    .foregroundStyle(StitchColor.ink)
+                Text("Add people to “\(title)”.")
+                    .font(StitchFont.sans(15, weight: .medium))
+                    .foregroundStyle(StitchColor.muted)
+                    .lineLimit(2)
+            }
+            .padding(.top, 8)
+            .accessibilityElement(children: .combine)
+
+            ScrollView {
+                LazyVStack(spacing: 0) {
+                    ForEach(FriendSample.friends) { person in
+                        let isOn = selected.contains(person.id)
+                        Button {
+                            if isOn { selected.remove(person.id) } else { selected.insert(person.id) }
+                        } label: {
+                            HStack(spacing: 14) {
+                                Avatar(person: person, size: 48)
+                                VStack(alignment: .leading, spacing: 2) {
+                                    Text(person.name)
+                                        .font(StitchFont.sans(17, weight: .medium))
+                                        .foregroundStyle(StitchColor.ink)
+                                    Text(person.handle)
+                                        .font(StitchFont.sans(13, weight: .medium))
+                                        .foregroundStyle(StitchColor.muted)
+                                }
+                                Spacer(minLength: 8)
+                                Image(systemName: isOn ? "checkmark.circle.fill" : "circle")
+                                    .font(.system(size: 22, weight: .semibold))
+                                    .foregroundStyle(isOn ? StitchColor.accent : StitchColor.dash)
+                            }
+                            .padding(.vertical, 10)
+                            .contentShape(Rectangle())
+                        }
+                        .buttonStyle(.plain)
+                        .accessibilityLabel(person.name)
+                        .accessibilityAddTraits(isOn ? [.isSelected] : [])
+                    }
+                }
+            }
+            .scrollIndicators(.hidden)
+
+            Button {
+                sent = true
+                dismiss()
+            } label: {
+                Text("Invite")
+                    .font(StitchFont.sans(16, weight: .semibold))
+                    .frame(maxWidth: .infinity)
+                    .frame(height: 44)
+            }
+            .buttonStyle(.glassProminent)
+            .buttonBorderShape(.capsule)
+            .tint(StitchColor.accent)
+            .disabled(selected.isEmpty)
+            .accessibilityHint(selected.isEmpty ? "Select at least one friend" : "Invites \(selected.count) friends")
+        }
+        .padding(.horizontal, 20)
+        .padding(.bottom, 12)
+        .background(StitchColor.cream)
+        .sensoryFeedback(.success, trigger: sent)
     }
 }

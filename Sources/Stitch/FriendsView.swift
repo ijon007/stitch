@@ -572,7 +572,7 @@ private struct PageSwitch: View {
     }
 }
 
-private struct Avatar: View {
+struct Avatar: View {
     var person: StitchPerson
     var size: CGFloat
 
@@ -835,7 +835,7 @@ private extension StitchColor {
     static let coverPhoto = Color(red: 148 / 255, green: 127 / 255, blue: 106 / 255)
 }
 
-private enum FriendSample {
+enum FriendSample {
     static let inviteURL = URL(string: "https://stitch.app/invite/joni")!
 
     static let me = StitchPerson(name: "Joni", tone: StitchColor.accent.opacity(0.75))
