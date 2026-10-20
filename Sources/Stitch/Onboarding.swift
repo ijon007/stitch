@@ -3,6 +3,7 @@ import SwiftUI
 enum OnboardingStage: Hashable {
     case welcome
     case explain(Int)
+    case quiz
 }
 
 struct OnboardingView: View {
@@ -10,6 +11,8 @@ struct OnboardingView: View {
 
     @State private var stage: OnboardingStage = .welcome
     @State private var forward = true
+    @State private var answers = OnboardingAnswers()
+    @AppStorage("stitch.name") private var savedName = ""
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
@@ -39,11 +42,22 @@ struct OnboardingView: View {
                     }
                 }
             )
+        case .quiz:
+            OnboardingQuiz(
+                answers: $answers,
+                onBack: { go(.explain(OnboardingExplainer.count - 1), forward: false) },
+                onDone: finishQuiz
+            )
         //STAGES
         }
     }
 
     private func finishExplainers() {
+        go(.quiz)
+    }
+
+    private func finishQuiz() {
+        savedName = answers.name
         onFinish()
     }
 
