@@ -14,6 +14,9 @@ struct OnboardingPaywall: View {
 
     @State private var plan: PaywallPlan = .yearly
     @State private var showClose = false
+    @State private var offering = false
+    @State private var offered = false
+    @State private var claimed = false
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
@@ -103,11 +106,19 @@ struct OnboardingPaywall: View {
             try? await Task.sleep(for: .seconds(1.2))
             withAnimation(.easeOut(duration: 0.3)) { showClose = true }
         }
-        //OFFER
+        .sheet(isPresented: $offering, onDismiss: { claimed ? onSubscribe() : onClose() }) {
+            OnboardingOffer(onClaim: { claimed = true })
+                .presentationDetents([.height(480)])
+                .presentationDragIndicator(.visible)
+                .presentationBackground(StitchColor.cream)
+        }
     }
 
+    /// The first close turns into the one-time offer; after that it really closes.
     private func close() {
-        onClose()
+        if offered { return onClose() }
+        offered = true
+        offering = true
     }
 
     private func feature(_ symbol: String, _ title: String) -> some View {
