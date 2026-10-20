@@ -24,8 +24,8 @@ enum ProfileShelf: String, CaseIterable, Identifiable {
 
 struct ProfileView: View {
     var name: String = "Joni"
-    var yours: [ProfileBoard] = ProfileBoard.sampleYours
-    var collabs: [ProfileBoard] = ProfileBoard.sampleCollabs
+    var yours: [ProfileBoard] = []
+    var collabs: [ProfileBoard] = []
 
     @State private var shelf: ProfileShelf = .yours
     @State private var showSettings = false
