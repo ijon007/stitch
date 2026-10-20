@@ -9,9 +9,27 @@ struct StitchApp: App {
 
     var body: some Scene {
         WindowGroup {
-            ContentView()
+            RootView()
                 .preferredColorScheme(.light)
         }
+    }
+}
+
+/// Shows onboarding until it's finished once, then the app.
+struct RootView: View {
+    @AppStorage("stitch.onboarded") private var onboarded = false
+
+    var body: some View {
+        ZStack {
+            if onboarded {
+                ContentView()
+                    .transition(.opacity)
+            } else {
+                OnboardingView { onboarded = true }
+                    .transition(.opacity)
+            }
+        }
+        .animation(.easeOut(duration: 0.35), value: onboarded)
     }
 }
 
