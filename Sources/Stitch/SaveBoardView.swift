@@ -100,7 +100,7 @@ struct SaveBoardView: View {
 
             VStack(spacing: 10) {
                 ShareLink(item: export.image, preview: SharePreview(title, image: export.image)) {
-                    Text("Share")
+                    Label("Share", systemImage: "square.and.arrow.up")
                         .font(StitchFont.sans(16, weight: .semibold))
                         .frame(maxWidth: .infinity)
                         .frame(height: 40)
@@ -112,7 +112,7 @@ struct SaveBoardView: View {
                 Button {
                     inviting = true
                 } label: {
-                    Text("Collaborate")
+                    Label("Collaborate", systemImage: "person.2")
                         .font(StitchFont.sans(16, weight: .semibold))
                         .foregroundStyle(StitchColor.ink)
                         .frame(maxWidth: .infinity)
@@ -122,12 +122,13 @@ struct SaveBoardView: View {
                 .buttonBorderShape(.capsule)
 
                 Button(action: saveToPhotos) {
-                    Text(savedPhotos ? "Saved to Photos" : "Save to Photos")
+                    Label(savedPhotos ? "Saved to Photos" : "Save to Photos",
+                          systemImage: savedPhotos ? "checkmark" : "arrow.down.to.line")
                         .font(StitchFont.sans(16, weight: .semibold))
                         .foregroundStyle(StitchColor.ink)
                         .frame(maxWidth: .infinity)
                         .frame(height: 40)
-                        .contentTransition(.opacity)
+                        .contentTransition(.symbolEffect(.replace))
                 }
                 .buttonStyle(.glass)
                 .buttonBorderShape(.capsule)
