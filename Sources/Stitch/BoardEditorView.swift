@@ -133,6 +133,10 @@ struct BoardDraft {
 
     var canUndo: Bool { !history.isEmpty }
 
+    init(items: [BoardItem] = []) {
+        self.items = items
+    }
+
     // ponytail: whole-array snapshots per change; fine for dozens of items, switch to diffs if boards grow huge.
     mutating func change(_ edit: (inout [BoardItem]) -> Void) {
         let before = items
@@ -216,7 +220,13 @@ struct LiveTransform {
 // MARK: - Editor
 
 struct BoardEditorView: View {
+    var startTitle = ""
+    var startItems: [BoardItem] = []
+    /// Set when re-editing a saved board, so Done updates it instead of adding a new one.
+    var replacing: SavedBoard?
+
     @Environment(\.dismiss) private var dismiss
+    @State private var seeded = false
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @FocusState private var focus: BoardFocus?
     @State private var title = ""
@@ -264,7 +274,11 @@ struct BoardEditorView: View {
                     export: export,
                     onBack: { withAnimation(motion) { self.export = nil } },
                     onDone: {
-                        BoardStore.shared.add(title: displayTitle, png: export.png)
+                        if let replacing {
+                            BoardStore.shared.replace(replacing, title: displayTitle, png: export.png)
+                        } else {
+                            BoardStore.shared.add(title: displayTitle, png: export.png)
+                        }
                         dismiss()
                     }
                 )
@@ -290,7 +304,13 @@ struct BoardEditorView: View {
         }
         .background(StitchColor.cream)
         .interactiveDismissDisabled(!draft.items.isEmpty)
-        .onAppear(perform: BoardDraftCheck.run)
+        .onAppear {
+            BoardDraftCheck.run()
+            guard !seeded else { return }
+            seeded = true
+            title = startTitle
+            if !startItems.isEmpty { draft = BoardDraft(items: startItems) }
+        }
     }
 
     private var editor: some View {

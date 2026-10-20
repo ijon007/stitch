@@ -44,6 +44,34 @@ final class BoardStore {
         persist()
     }
 
+    func rename(_ board: SavedBoard, to title: String) {
+        let trimmed = title.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty, let index = boards.firstIndex(where: { $0.id == board.id }) else { return }
+        boards[index].title = trimmed
+        persist()
+    }
+
+    /// Swaps in a re-edited image under a new file name, so covers refresh.
+    func replace(_ board: SavedBoard, title: String, png: URL) {
+        guard let index = boards.firstIndex(where: { $0.id == board.id }) else { return add(title: title, png: png) }
+        let file = "\(UUID().uuidString).png"
+        do {
+            try FileManager.default.copyItem(at: png, to: folder.appending(path: file))
+        } catch {
+            return
+        }
+        try? FileManager.default.removeItem(at: imageURL(boards[index]))
+        boards[index].title = title
+        boards[index].file = file
+        persist()
+    }
+
+    /// Saved boards keep only their picture, so editing starts from it as one full-size photo.
+    func editItems(_ board: SavedBoard) -> [BoardItem] {
+        guard let image = image(board) else { return [] }
+        return [BoardItem(content: .photo(image, .plain), center: CGPoint(x: 0.5, y: 0.5), scale: 2.55)]
+    }
+
     func remove(_ board: SavedBoard) {
         try? FileManager.default.removeItem(at: imageURL(board))
         boards.removeAll { $0.id == board.id }
