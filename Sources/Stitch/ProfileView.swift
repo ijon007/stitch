@@ -332,6 +332,7 @@ private struct SavedBoardViewer: View {
                     }
                     .glassEffect(.regular.interactive(), in: .circle)
                     .tint(.primary)
+                    .controlSize(.small)
                     .accessibilityLabel("More")
                 }
             }

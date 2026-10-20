@@ -33,7 +33,6 @@ struct BoardMenuItems: View {
                 Label("Share", systemImage: "square.and.arrow.up")
             }
         }
-        Divider()
         Button("Delete", systemImage: "trash", role: .destructive) { actions.deleting = board }
     }
 }
