@@ -283,19 +283,25 @@ struct FriendsView: View {
                 decline(person)
             } label: {
                 Image(systemName: "xmark")
-                    .font(.system(size: 13, weight: .bold))
+                    .font(.system(size: 12, weight: .bold))
                     .foregroundStyle(StitchColor.muted)
-                    .frame(width: 30, height: 30)
+                    .frame(width: 36, height: 36)
+                    .contentShape(Circle())
             }
-            .buttonStyle(.glass)
-            .buttonBorderShape(.circle)
+            .buttonStyle(.plain)
+            .glassEffect(.regular.interactive(), in: .circle)
             .accessibilityLabel("Decline \(person.name)")
 
-            Button("Accept") { accept(person) }
-                .font(StitchFont.sans(15, weight: .semibold))
-                .buttonStyle(.glassProminent)
-                .buttonBorderShape(.capsule)
-                .tint(StitchColor.accent)
+            Button { accept(person) } label: {
+                Text("Accept")
+                    .font(StitchFont.sans(15, weight: .semibold))
+                    .foregroundStyle(StitchColor.cream)
+                    .padding(.horizontal, 16)
+                    .frame(height: 36)
+                    .contentShape(Capsule())
+            }
+            .buttonStyle(.plain)
+            .glassEffect(.regular.tint(StitchColor.accent).interactive(), in: .capsule)
         }
         .padding(.vertical, 12)
     }
