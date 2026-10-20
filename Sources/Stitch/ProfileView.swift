@@ -46,7 +46,7 @@ struct ProfileView: View {
                     SettingsView(name: name)
                 }
                 .fullScreenCover(item: $opened) { board in
-                    SavedBoardViewer(board: board)
+                    SavedBoardViewer(opened: board)
                 }
                 .boardActions(actions)
         }
@@ -291,8 +291,14 @@ private struct SavedBoardPreview: View {
 }
 
 private struct SavedBoardViewer: View {
-    var board: SavedBoard
+    var opened: SavedBoard
     @Environment(\.dismiss) private var dismiss
+    @State private var actions = BoardActionState()
+
+    /// Follows the store, so a rename or re-edit shows up while the board is open.
+    private var board: SavedBoard {
+        BoardStore.shared.boards.first { $0.id == opened.id } ?? opened
+    }
 
     var body: some View {
         VStack(spacing: 18) {
@@ -314,17 +320,17 @@ private struct SavedBoardViewer: View {
                     .buttonStyle(.plain)
                     .accessibilityLabel("Close")
                     Spacer()
-                    if let image = BoardStore.shared.image(board) {
-                        ShareLink(item: Image(uiImage: image), preview: SharePreview(board.title, image: Image(uiImage: image))) {
-                            Image(systemName: "square.and.arrow.up")
-                                .font(.system(size: 16, weight: .semibold))
-                                .foregroundStyle(StitchColor.ink)
-                                .frame(width: 44, height: 44)
-                                .contentShape(Rectangle())
-                        }
-                        .buttonStyle(.plain)
-                        .accessibilityLabel("Share")
+                    Menu {
+                        BoardMenuItems(board: board, actions: actions)
+                    } label: {
+                        Image(systemName: "ellipsis")
+                            .font(.system(size: 16, weight: .semibold))
+                            .foregroundStyle(StitchColor.ink)
+                            .frame(width: 36, height: 36)
+                            .contentShape(Circle())
                     }
+                    .glassEffect(.regular.interactive(), in: .circle)
+                    .accessibilityLabel("More")
                 }
             }
             .padding(.horizontal, 10)
@@ -347,6 +353,7 @@ private struct SavedBoardViewer: View {
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .background(StitchColor.cream)
+        .boardActions(actions, onDeleted: { dismiss() })
     }
 }
 
