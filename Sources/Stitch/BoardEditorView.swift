@@ -241,7 +241,10 @@ struct BoardEditorView: View {
                     aspect: boardSize.width / max(boardSize.height, 1),
                     export: export,
                     onBack: { withAnimation(motion) { self.export = nil } },
-                    onDone: { dismiss() }
+                    onDone: {
+                        BoardStore.shared.add(title: displayTitle, png: export.png)
+                        dismiss()
+                    }
                 )
                 .transition(slide(fromTrailing: true))
             } else {

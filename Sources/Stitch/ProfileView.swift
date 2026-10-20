@@ -5,6 +5,7 @@ struct ProfileBoard: Identifiable, Hashable {
     var title: String
     var owner: String?
     var sticker: String
+    var saved: SavedBoard? = nil
 }
 
 enum ProfileShelf: String, CaseIterable, Identifiable {
@@ -28,6 +29,12 @@ struct ProfileView: View {
 
     @State private var shelf: ProfileShelf = .yours
     @State private var showSettings = false
+    @State private var opened: SavedBoard?
+    @State private var store = BoardStore.shared
+
+    private var yourBoards: [ProfileBoard] {
+        store.boards.map { ProfileBoard(id: $0.id.uuidString, title: $0.title, sticker: "", saved: $0) } + yours
+    }
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
@@ -36,6 +43,9 @@ struct ProfileView: View {
                 .toolbar(.hidden, for: .navigationBar)
                 .navigationDestination(isPresented: $showSettings) {
                     SettingsView(name: name)
+                }
+                .fullScreenCover(item: $opened) { board in
+                    SavedBoardViewer(board: board)
                 }
         }
     }
@@ -46,7 +56,7 @@ struct ProfileView: View {
             ShelfSwitch(shelf: $shelf)
             ZStack {
                 if shelf == .yours {
-                    shelfPage(yours, empty: .yours)
+                    shelfPage(yourBoards, empty: .yours)
                         .transition(pageTransition(fromTrailing: false))
                 } else {
                     shelfPage(collabs, empty: .collabs)
@@ -105,7 +115,9 @@ struct ProfileView: View {
             ScrollView {
                 LazyVStack(spacing: 18) {
                     ForEach(boards) { board in
-                        BoardCoverCard(board: board)
+                        BoardCoverCard(board: board) {
+                            if let saved = board.saved { opened = saved }
+                        }
                     }
                 }
                 .padding(.bottom, 12)
@@ -170,13 +182,17 @@ private struct ShelfSwitch: View {
 
 private struct BoardCoverCard: View {
     var board: ProfileBoard
+    var onOpen: () -> Void = {}
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
-        Button {
-        } label: {
+        Button(action: onOpen) {
             VStack(alignment: .leading, spacing: 8) {
-                CoverArt(sticker: board.sticker)
+                if let saved = board.saved {
+                    SavedCover(board: saved)
+                } else {
+                    CoverArt(sticker: board.sticker)
+                }
                 HStack(alignment: .firstTextBaseline) {
                     Text(board.title)
                         .font(StitchFont.display(20))
@@ -230,6 +246,85 @@ private struct CoverArt: View {
         .frame(height: 176)
         .clipShape(RoundedRectangle(cornerRadius: 28, style: .continuous))
         .accessibilityHidden(true)
+    }
+}
+
+private struct SavedCover: View {
+    var board: SavedBoard
+
+    var body: some View {
+        ZStack {
+            StitchColor.slot
+            if let image = BoardStore.shared.image(board) {
+                Image(uiImage: image)
+                    .resizable()
+                    .scaledToFill()
+            }
+        }
+        .frame(maxWidth: .infinity)
+        .frame(height: 176)
+        .clipShape(RoundedRectangle(cornerRadius: 28, style: .continuous))
+        .accessibilityHidden(true)
+    }
+}
+
+private struct SavedBoardViewer: View {
+    var board: SavedBoard
+    @Environment(\.dismiss) private var dismiss
+
+    var body: some View {
+        VStack(spacing: 18) {
+            ZStack {
+                Text(board.title)
+                    .font(StitchFont.display(22))
+                    .foregroundStyle(StitchColor.ink)
+                    .lineLimit(1)
+                    .padding(.horizontal, 72)
+                    .accessibilityAddTraits(.isHeader)
+                HStack {
+                    Button { dismiss() } label: {
+                        Image(systemName: "xmark")
+                            .font(.system(size: 16, weight: .semibold))
+                            .foregroundStyle(StitchColor.ink)
+                            .frame(width: 44, height: 44)
+                            .contentShape(Rectangle())
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityLabel("Close")
+                    Spacer()
+                    if let image = BoardStore.shared.image(board) {
+                        ShareLink(item: Image(uiImage: image), preview: SharePreview(board.title, image: Image(uiImage: image))) {
+                            Image(systemName: "square.and.arrow.up")
+                                .font(.system(size: 16, weight: .semibold))
+                                .foregroundStyle(StitchColor.ink)
+                                .frame(width: 44, height: 44)
+                                .contentShape(Rectangle())
+                        }
+                        .buttonStyle(.plain)
+                        .accessibilityLabel("Share")
+                    }
+                }
+            }
+            .padding(.horizontal, 10)
+            .frame(height: 52)
+
+            if let image = BoardStore.shared.image(board) {
+                Image(uiImage: image)
+                    .resizable()
+                    .scaledToFit()
+                    .clipShape(RoundedRectangle(cornerRadius: 28, style: .continuous))
+                    .padding(.horizontal, 16)
+                    .frame(maxHeight: .infinity)
+                    .accessibilityLabel(board.title)
+            }
+
+            Text(board.created.formatted(date: .abbreviated, time: .omitted))
+                .font(StitchFont.sans(14, weight: .medium))
+                .foregroundStyle(StitchColor.muted)
+                .padding(.bottom, 12)
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .background(StitchColor.cream)
     }
 }
 
