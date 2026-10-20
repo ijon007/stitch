@@ -5,6 +5,7 @@ enum OnboardingStage: Hashable {
     case explain(Int)
     case quiz
     case building
+    case paywall
 }
 
 struct OnboardingView: View {
@@ -51,7 +52,8 @@ struct OnboardingView: View {
             )
         case .building:
             OnboardingBuilding(answers: answers, onDone: finishBuilding)
-        //STAGES
+        case .paywall:
+            OnboardingPaywall(name: answers.name, onClose: onFinish, onSubscribe: onFinish)
         }
     }
 
@@ -65,7 +67,7 @@ struct OnboardingView: View {
     }
 
     private func finishBuilding() {
-        onFinish()
+        go(.paywall)
     }
 
     private func go(_ next: OnboardingStage, forward: Bool = true) {
