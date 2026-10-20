@@ -291,13 +291,13 @@ struct FriendsView: View {
             Button { accept(person) } label: {
                 Text("Accept")
                     .font(StitchFont.sans(15, weight: .semibold))
-                    .foregroundStyle(StitchColor.cream)
+                    .foregroundStyle(StitchColor.ink)
                     .padding(.horizontal, 16)
                     .frame(height: 36)
                     .contentShape(Capsule())
             }
             .buttonStyle(.plain)
-            .glassEffect(.regular.tint(StitchColor.accent).interactive(), in: .capsule)
+            .glassEffect(.regular.interactive(), in: .capsule)
         }
         .padding(.vertical, 12)
     }
