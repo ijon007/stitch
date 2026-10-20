@@ -591,6 +591,15 @@ struct Avatar: View {
                     .font(StitchFont.display(size * 0.46))
                     .foregroundStyle(StitchColor.paper)
             }
+            .overlay {
+                AsyncImage(url: person.photoURL, transaction: Transaction(animation: .easeOut(duration: 0.2))) { phase in
+                    if let image = phase.image {
+                        image.resizable().scaledToFill().transition(.opacity)
+                    }
+                }
+                .frame(width: size, height: size)
+                .clipShape(Circle())
+            }
             .accessibilityHidden(true)
     }
 }
@@ -815,6 +824,8 @@ struct StitchPerson: Identifiable {
     var tone: Color
     var id: String { name }
     var handle: String { "@\(name.lowercased())" }
+    /// Same name, same face: the name seeds the placeholder portrait.
+    var photoURL: URL? { URL(string: "https://i.pravatar.cc/240?u=stitch-\(name.lowercased())") }
 
     var note: String {
         switch boards.count {

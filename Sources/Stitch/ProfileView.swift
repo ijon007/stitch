@@ -67,13 +67,10 @@ struct ProfileView: View {
     private var header: some View {
         HStack(spacing: 10) {
             HStack(spacing: 10) {
-                Circle()
-                    .fill(StitchColor.swatchStone.opacity(0.72))
-                    .frame(width: 34, height: 34)
+                Avatar(person: FriendSample.me, size: 34)
                     .overlay {
                         Circle().stroke(StitchColor.line, lineWidth: 0.5)
                     }
-                    .accessibilityHidden(true)
 
                 Text(name)
                     .font(StitchFont.display(34))
