@@ -115,9 +115,9 @@ struct FriendsView: View {
                             .autocorrectionDisabled()
                             .submitLabel(.search)
                     }
-                    .padding(.horizontal, 16)
+                    .padding(.horizontal, 14)
                     .frame(maxWidth: .infinity)
-                    .frame(height: 48)
+                    .frame(height: 44)
                     .glassEffect(.regular.interactive(), in: .capsule)
                     .glassEffectID("add", in: glass)
 
@@ -125,7 +125,7 @@ struct FriendsView: View {
                         Image(systemName: "xmark")
                             .font(.system(size: 15, weight: .semibold))
                             .foregroundStyle(StitchColor.ink)
-                            .frame(width: 48, height: 48)
+                            .frame(width: 44, height: 44)
                             .contentShape(Circle())
                     }
                     .buttonStyle(.plain)
@@ -144,14 +144,11 @@ struct FriendsView: View {
                     Button(action: openSearch) {
                         Label("Add", systemImage: "plus")
                             .font(StitchFont.sans(16, weight: .semibold))
-                            .foregroundStyle(StitchColor.cream)
-                            .padding(.horizontal, 20)
-                            .frame(height: 44)
-                            .contentShape(Capsule())
                     }
-                    .buttonStyle(.plain)
-                    .glassEffect(.regular.tint(StitchColor.accent).interactive(), in: .capsule)
-                    .glassEffectID("add", in: glass)
+                    .buttonStyle(.glassProminent)
+                    .buttonBorderShape(.capsule)
+                    .controlSize(.large)
+                    .tint(StitchColor.accent)
                     .accessibilityHint("Find people or share an invite")
                 }
             }
@@ -178,11 +175,10 @@ struct FriendsView: View {
                 ShareLink(item: FriendSample.inviteURL) {
                     Label("Share invite link", systemImage: "square.and.arrow.up")
                         .font(StitchFont.sans(16, weight: .semibold))
-                        .padding(.horizontal, 6)
-                        .frame(height: 36)
                 }
                 .buttonStyle(.glassProminent)
                 .buttonBorderShape(.capsule)
+                .controlSize(.large)
                 .tint(StitchColor.accent)
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -408,10 +404,10 @@ struct FriendsView: View {
                     Label("Share", systemImage: "square.and.arrow.up")
                         .font(StitchFont.sans(15, weight: .semibold))
                         .frame(maxWidth: .infinity)
-                        .frame(height: 36)
                 }
                 .buttonStyle(.glassProminent)
                 .buttonBorderShape(.capsule)
+                .controlSize(.large)
                 .tint(StitchColor.accent)
 
                 Button(action: copyLink) {
@@ -419,11 +415,11 @@ struct FriendsView: View {
                         .font(StitchFont.sans(15, weight: .semibold))
                         .foregroundStyle(StitchColor.ink)
                         .frame(maxWidth: .infinity)
-                        .frame(height: 36)
                         .contentTransition(.symbolEffect(.replace))
                 }
                 .buttonStyle(.glass)
                 .buttonBorderShape(.capsule)
+                .controlSize(.large)
             }
         }
         .padding(18)
