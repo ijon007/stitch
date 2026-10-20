@@ -40,7 +40,7 @@ struct BoardDrawer: View {
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
-        .padding(.top, 10)
+        .padding(.top, 26)
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
         .safeAreaInset(edge: .bottom, spacing: 10) {
             Button(action: addSelected) {
@@ -54,7 +54,7 @@ struct BoardDrawer: View {
             .tint(StitchColor.accent)
             .disabled(selectedCount == 0 || adding)
             .padding(.horizontal, 16)
-            .padding(.bottom, 10)
+            .padding(.bottom, -6)
             .accessibilityHint(selectedCount == 0 ? "Select photos or stickers first" : "Adds \(selectedCount) to the board")
         }
         .sensoryFeedback(.selection, trigger: tab)
