@@ -324,12 +324,10 @@ private struct SavedBoardViewer: View {
                         BoardMenuItems(board: board, actions: actions)
                     } label: {
                         Image(systemName: "ellipsis")
-                            .font(.system(size: 16, weight: .semibold))
                             .foregroundStyle(StitchColor.ink)
-                            .frame(width: 36, height: 36)
-                            .contentShape(Circle())
                     }
-                    .glassEffect(.regular.interactive(), in: .circle)
+                    .buttonStyle(.glass)
+                    .buttonBorderShape(.circle)
                     .accessibilityLabel("More")
                 }
             }
