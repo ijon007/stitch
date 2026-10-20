@@ -4,6 +4,7 @@ enum OnboardingStage: Hashable {
     case welcome
     case explain(Int)
     case quiz
+    case building
 }
 
 struct OnboardingView: View {
@@ -48,6 +49,8 @@ struct OnboardingView: View {
                 onBack: { go(.explain(OnboardingExplainer.count - 1), forward: false) },
                 onDone: finishQuiz
             )
+        case .building:
+            OnboardingBuilding(answers: answers, onDone: finishBuilding)
         //STAGES
         }
     }
@@ -58,6 +61,10 @@ struct OnboardingView: View {
 
     private func finishQuiz() {
         savedName = answers.name
+        go(.building)
+    }
+
+    private func finishBuilding() {
         onFinish()
     }
 
