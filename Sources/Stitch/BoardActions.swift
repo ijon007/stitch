@@ -33,7 +33,7 @@ struct BoardMenuItems: View {
             }
         }
         Divider()
-        Button("Delete", systemImage: "trash", role: .destructive) { actions.deleting = board }
+        Button("Delete", systemImage: "trash") { actions.deleting = board }
     }
 }
 
