@@ -20,6 +20,8 @@ struct SettingsView: View {
     @AppStorage("stitch.notifyCollabs") private var notifyCollabs = true
     @AppStorage("stitch.notifyFriends") private var notifyFriends = true
     @AppStorage("stitch.boardAdds") private var boardAdds = BoardAddPolicy.friends
+    @AppStorage("stitch.onboarded") private var onboarded = true
+    @AppStorage("stitch.name") private var savedName = ""
 
     private var handle: String {
         "@\(name.lowercased().filter(\.isLetter))"
@@ -69,6 +71,18 @@ struct SettingsView: View {
                 Text("Privacy")
             } footer: {
                 Text("Friends can always add you. Anyone means people who have your invite link.")
+            }
+
+            Section {
+                Button {
+                    savedName = ""
+                    onboarded = false
+                } label: {
+                    Label("Reset onboarding", systemImage: "arrow.counterclockwise")
+                        .foregroundStyle(StitchColor.accent)
+                }
+            } footer: {
+                Text("Clears your answers and shows the welcome screens again.")
             }
         }
         .listStyle(.insetGrouped)
