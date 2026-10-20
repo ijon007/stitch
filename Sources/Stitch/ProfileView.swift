@@ -48,6 +48,7 @@ struct ProfileView: View {
                     SavedBoardViewer(board: board)
                 }
         }
+        .preference(key: PagerLock.self, value: showSettings)
     }
 
     private var profile: some View {
