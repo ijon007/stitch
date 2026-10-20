@@ -119,6 +119,7 @@ struct ProfileView: View {
                     ForEach(boards) { board in
                         if let saved = board.saved {
                             BoardCoverCard(board: board) { opened = saved }
+                                .tint(.primary)
                                 .contextMenu {
                                     BoardMenuItems(board: saved, actions: actions)
                                 } preview: {
@@ -330,6 +331,7 @@ private struct SavedBoardViewer: View {
                             .contentShape(Circle())
                     }
                     .glassEffect(.regular.interactive(), in: .circle)
+                    .tint(.primary)
                     .accessibilityLabel("More")
                 }
             }

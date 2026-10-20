@@ -15,6 +15,15 @@ struct BoardMenuItems: View {
     var actions: BoardActionState
 
     var body: some View {
+        // ContentView tints the whole app red, and menus inherit it; only Delete should be red.
+        Group {
+            items
+        }
+        .tint(.primary)
+    }
+
+    @ViewBuilder
+    private var items: some View {
         Button("Edit", systemImage: "pencil") { actions.editing = board }
         if let image = BoardStore.shared.image(board) {
             ShareLink(
@@ -25,7 +34,7 @@ struct BoardMenuItems: View {
             }
         }
         Divider()
-        Button("Delete", systemImage: "trash") { actions.deleting = board }
+        Button("Delete", systemImage: "trash", role: .destructive) { actions.deleting = board }
     }
 }
 
