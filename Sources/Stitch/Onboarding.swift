@@ -156,11 +156,11 @@ struct OnboardingButton: View {
             Text(title)
                 .font(StitchFont.sans(17, weight: .semibold))
                 .frame(maxWidth: .infinity)
-                .frame(height: 52)
                 .contentTransition(.opacity)
         }
         .buttonStyle(.glassProminent)
         .buttonBorderShape(.capsule)
+        .controlSize(.large)
         .tint(StitchColor.accent)
         .disabled(!enabled)
         .padding(.horizontal, 20)
