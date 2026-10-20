@@ -30,6 +30,7 @@ struct ProfileView: View {
     @State private var shelf: ProfileShelf = .yours
     @State private var showSettings = false
     @State private var opened: SavedBoard?
+    @State private var actions = BoardActionState()
     @State private var store = BoardStore.shared
 
     private var yourBoards: [ProfileBoard] {
@@ -47,6 +48,7 @@ struct ProfileView: View {
                 .fullScreenCover(item: $opened) { board in
                     SavedBoardViewer(board: board)
                 }
+                .boardActions(actions)
         }
     }
 
@@ -115,8 +117,15 @@ struct ProfileView: View {
             ScrollView {
                 LazyVStack(spacing: 18) {
                     ForEach(boards) { board in
-                        BoardCoverCard(board: board) {
-                            if let saved = board.saved { opened = saved }
+                        if let saved = board.saved {
+                            BoardCoverCard(board: board) { opened = saved }
+                                .contextMenu {
+                                    BoardMenuItems(board: saved, actions: actions)
+                                } preview: {
+                                    SavedBoardPreview(board: saved)
+                                }
+                        } else {
+                            BoardCoverCard(board: board)
                         }
                     }
                 }
@@ -265,6 +274,19 @@ private struct SavedCover: View {
         .frame(height: 176)
         .clipShape(RoundedRectangle(cornerRadius: 28, style: .continuous))
         .accessibilityHidden(true)
+    }
+}
+
+private struct SavedBoardPreview: View {
+    var board: SavedBoard
+
+    var body: some View {
+        if let image = BoardStore.shared.image(board) {
+            Image(uiImage: image)
+                .resizable()
+                .scaledToFit()
+                .frame(width: 320)
+        }
     }
 }
 
