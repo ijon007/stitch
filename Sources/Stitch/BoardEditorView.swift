@@ -66,6 +66,28 @@ enum BoardFont: String, CaseIterable, Identifiable {
         case .mono: .system(size: size, weight: .medium, design: .monospaced)
         }
     }
+
+    /// The bundled faces ship one style only, so italic has to be drawn as a slant.
+    var hasItalicFace: Bool {
+        switch self {
+        case .editorial, .clean: false
+        case .classic, .round, .mono: true
+        }
+    }
+}
+
+/// Synthetic italic: leans the glyphs about their middle so the layout doesn't shift.
+struct Slant: GeometryEffect {
+    var amount: CGFloat
+
+    var animatableData: CGFloat {
+        get { amount }
+        set { amount = newValue }
+    }
+
+    func effectValue(size: CGSize) -> ProjectionTransform {
+        ProjectionTransform(CGAffineTransform(a: 1, b: 0, c: -amount, d: 1, tx: amount * size.height / 2, ty: 0))
+    }
 }
 
 enum BoardTextStyle: CaseIterable {
@@ -699,10 +721,11 @@ private extension View {
     func boardGlyphs(_ text: BoardText) -> some View {
         font(text.font.font(28))
             .bold(text.bold)
-            .italic(text.italic)
+            .italic(text.italic && text.font.hasItalicFace)
             .underline(text.underline)
             .foregroundStyle(text.style.ink)
             .multilineTextAlignment(.center)
+            .modifier(Slant(amount: text.italic && !text.font.hasItalicFace ? 0.2 : 0))
     }
 
     func boardChip(_ style: BoardTextStyle) -> some View {
@@ -727,15 +750,15 @@ private struct TextStyleBar: View {
 
     var body: some View {
         ScrollView(.horizontal) {
-            GlassEffectContainer(spacing: 8) {
-                HStack(spacing: 8) {
+            GlassEffectContainer(spacing: 6) {
+                HStack(spacing: 6) {
                     Button {
                         apply { $0.style = $0.style.next }
                     } label: {
                         Text("A")
-                            .font(StitchFont.display(18, weight: .medium))
+                            .font(StitchFont.display(16, weight: .medium))
                             .foregroundStyle(text.style.ink)
-                            .frame(width: 26, height: 26)
+                            .frame(width: 22, height: 22)
                             .background(text.style.fill ?? .clear, in: RoundedRectangle(cornerRadius: 7, style: .continuous))
                             .overlay {
                                 if text.style.fill == nil || text.style == .label {
@@ -743,7 +766,7 @@ private struct TextStyleBar: View {
                                         .stroke(StitchColor.dash, lineWidth: 1)
                                 }
                             }
-                            .frame(width: 44, height: 44)
+                            .frame(width: 38, height: 38)
                             .contentShape(Circle())
                     }
                     .buttonStyle(.plain)
@@ -766,10 +789,10 @@ private struct TextStyleBar: View {
                             apply { $0.font = font }
                         } label: {
                             Text(font.name)
-                                .font(font.font(16))
+                                .font(font.font(15))
                                 .foregroundStyle(isOn ? StitchColor.cream : StitchColor.ink)
-                                .padding(.horizontal, 16)
-                                .frame(height: 44)
+                                .padding(.horizontal, 13)
+                                .frame(height: 38)
                                 .contentShape(Capsule())
                         }
                         .buttonStyle(.plain)
@@ -791,9 +814,9 @@ private struct TextStyleBar: View {
             apply(edit)
         } label: {
             Image(systemName: symbol)
-                .font(.system(size: 16, weight: .semibold))
+                .font(.system(size: 14, weight: .semibold))
                 .foregroundStyle(isOn ? StitchColor.cream : StitchColor.ink)
-                .frame(width: 44, height: 44)
+                .frame(width: 38, height: 38)
                 .contentShape(Circle())
         }
         .buttonStyle(.plain)
